@@ -959,9 +959,13 @@ use exp_params
 implicit none
 
 real :: dC(nr+1)
-real :: oneoverrhorbarsqdr(nr+1)
-real :: dchidcomp(nr+1)
-real :: oneoverdr(nr+1), dComp(nr+1), dPtotal(nr+1)
+!real :: oneoverrhorbarsqdr(nr+1)
+real :: oneoverrhorbarsqdr
+!real :: dchidcomp(nr+1)
+!real :: oneoverdr(nr+1), dComp(nr+1), dPtotal(nr+1)
+real :: dchidcomp_p, dchidcomp_m,rhoD_p, rhoD_m, rsq_p, rsq_m
+real :: dr_p, dr_m, dCompdr_p, dCompdr_m
+
 real :: epsm = mm_CH/mm_DD
 real :: rho2overnu12(nr+1)
 real :: logLambda, r_baro_p1_sq, r_baro_sq
@@ -973,16 +977,28 @@ dchidcomp(:) = epsm/(epsm+Comp(:,1)-epsm*Comp(:,1))**2.0
 
 
 do i = 1,nr
-    r_bar = 0.5*(r(i+1,2)+r(i,2))
-    r_bar_sq = r_bar*r_bar
+    oneoverrhorbarsqdr = 1.0/rho(i,2)/(0.5*(r(i+1,1)+r(i,1)))**2.0/dr(i,1)
 
-    r_baro_p1_sq = (0.5*(r(i+2,1)+r(i+1,1)))**2.0
-    r_baro_sq = (0.5*(r(i+1,1)+r(i,1)))**2.0
+    if (i .eq. 1) then
+      dCompdr_m = 0
+      dCompdr_p = (Comp(i+1,1) - Comp(i,1))/(0.5*(dr(i+1)+dr(i)))
 
-    oneoverrhorbarsqdr(i) = 1.0/rho(i,2)/r_bar_sq/dr(i,2)
-    !dComp(i) = (Comp(i+1,1)*r_baro_p1_sq-Comp(i,1)*r_baro_sq)
-    dComp(i) = (Comp(i+1,1)-Comp(i,1))*r_bar_sq
-    dPtotal(i) = P(i+1,1)-P(i,1)
+
+
+    else if (i .eq. nr) then
+      dCompdr_p = 0
+      dCompdr_m = (Comp(i,1) - Comp(i-1,1))/(0.5*(dr(i)+dr(i-1)))
+
+
+
+    else then
+      dCompdr_p = (Comp(i+1,1) - Comp(i,1))/(0.5*(dr(i+1)+dr(i)))
+      dCompdr_m = (Comp(i,1) - Comp(i-1,1))/(0.5*(dr(i)+dr(i-1)))
+
+
+      
+    end if
+
 
     !print *,'oneoverrhorbarsqdr,dComp,rho2overnu12 = ',oneoverrhorbarsqdr(i),dComp(i),rho2overnu12(i)
 
