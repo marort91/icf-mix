@@ -1,0 +1,11 @@
+#!/bin/bash
+echo "Enter sim name: "
+read dir
+
+rm -r $dir
+mkdir $dir
+cp diff_mod.f90 $dir
+cp input $dir
+cd $dir
+gfortran -fimplicit-none diff_mod.f90
+./a.out
