@@ -92,7 +92,7 @@ MODULE phys_const
   REAL(prec),PARAMETER  :: k_boltz = 8.6173324e-5, N_av = 6.02214129e23,     &
                          &    JeV_conv = 1.602e-19, a_sbc = 7.5657e-16,      &
                          &    mm_DD = 4.029e-3,  mm_CH = 13.018947e-3,       &
-                         &    eps = 1.e-12
+                         &    eps = 1.e-15, eps_elecs = 1.e-15
 
 END MODULE phys_const
 
@@ -378,13 +378,15 @@ SUBROUTINE initialize
   M(:)                             = rho(:,1)*Vol(:,1)                      !  total mass [kg] in cell
   N_part(1:in_bound)               = (N_av/mm_DD) * M(1:in_bound)           !  total number of particles in cell
   N_part((in_bound+1):(nr+1))      = (N_av/mm_CH) * M((in_bound+1):(nr+1)) 
-  N_elec(1:in_bound)               =  z1    !   odd name - used as zbar  
-  N_elec((in_bound+1):nr)          =  z2    !     but zbar by material not by zone - need to revise
+  
   
   ! initialize ionization state
   ionized(:)                       =  0.0
   ionized(in_forced:nr)            =  ion_frac
-  N_part(in_forced:nr)             =  (1+ionized(in_forced:nr)*N_elec(in_forced:nr)) *        &
+  N_elec(1:in_bound)               = (N_av/mm_DD) * M(1:in_bound)*z1    !   odd name - used as zbar  
+  N_elec((in_bound+1):nr)          = (N_av/mm_CH) * M((in_bound+1):(nr+1))*z2    !     but zbar by material not by zone - need to revise
+  N_elec(:)                        =  N_elec(:)*ionized(:)+eps_elecs
+  N_part(in_forced:nr)             =  (1+ionized(in_forced:nr)*z2) *        &
                                       N_part(in_forced:nr)       !   add electrons to particle pressure 
                                                                  !      assuming in_forced region is ionized
 
@@ -540,7 +542,7 @@ SUBROUTINE solve_eqns
     end if
   end do
 
-  N_elec(:) = (z1*Comp(:,2)/mm_DD + z2*(1-Comp(:,2))/mm_CH)*ionized(:)*M(:)*N_av    !  ne - but not needed here 
+  N_elec(:) = (z1*Comp(:,2)/mm_DD + z2*(1-Comp(:,2))/mm_CH)*ionized(:)*M(:)*N_av+eps_elecs    !  ne - needed in mixing!
   N_part(:) = N_av*M(:)*(  Comp(:,2)/ mm_DD* ( 1.+ionized(:)*z1 ) +(1.-Comp(:,2))/ mm_CH* ( 1.+ionized(:)*z2 )  )    !   z1 = 1 and z2 = z2 hardwired in
   !   do i=1,nr
   !    print *,'Npart = ',N_part(i)
@@ -984,13 +986,13 @@ rho2overnu12(:) = 3.2137e18/(z1*z2)**2/logLambda*(mm_CH*mm_DD*(mm_DD+mm_CH))**0.
 chi(:) = Comp(i,1)/(Comp(i,1)+(1.0-Comp(i,1))/epsm)
 pelecs(:) = N_elec(:)/Vol(:,2)*Temp(i,2)
 pions(:) = P(:,2)-pelecs(:)
-Zi(:) = (N_av*M(:)*(Comp(:,1)/mm_DD)*ionized(:)*z1)/N_elec(:)
+Zi(:) = (N_av*M(:)*(Comp(:,1)/mm_DD)*ionized(:)*z1)/N_elec(:)+eps_elecs
 
 
 
 do i = 1,nr
     oneoverrhorbarsqdr = 1.0/rho(i,2)/(0.5*(r(i+1,2)+r(i,2)))**2.0/dr(i,2)
-
+    !print *, "Z(i)", N_elec(i)
     if (i .eq. 1) then
       rsq_m = r(i,2)*r(i,2)
       rsq_p = r(i+1,2)*r(i+1,2)
@@ -1095,12 +1097,14 @@ do i = 1,nr
       
     end if
 
-    !print *, "Zmy_p", Zmy_p
+   ! print *, "Zmy_p", ZmY_p
 
     dC(i) = oneoverrhorbarsqdr*(-rhoD_p*rsq_p*&
-    	(dchidcomp_p*dCompdr_p-1.0/pions_p*(XmY_p*dPionsdr_p))-&
-    	(dchidcomp_m*dCompdr_m-1.0/pions_m*(XmY_m*dPionsdr_m))&
+    	(dchidcomp_p*dCompdr_p-1.0/pions_p*(XmY_p*dPionsdr_p-ZmY_p*dPelecsdr_p))-&
+    	(dchidcomp_m*dCompdr_m-1.0/pions_m*(XmY_m*dPionsdr_m-ZmY_m*dPelecsdr_m))&
     	*rhoD_m*rsq_m)
+
+    !print *, 'dC', dC(i)
     !print *,'oneoverrhorbarsqdr,dComp,rho2overnu12 = ',oneoverrhorbarsqdr(i),dComp(i),rho2overnu12(i)
 
 end do
