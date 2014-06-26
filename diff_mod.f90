@@ -530,7 +530,7 @@ SUBROUTINE solve_eqns
   !  print *,'step'
   !end if
 
-   Comp(:,2) = Comp(:,1) + dt*dC(:)
+   Comp(:,2) = Comp(:,1) - dt*dC(:)
    Comp((nr+1),2) = 0
 
   ! determine if zone is ionized based on temperature change and change N_part due to new Comp
@@ -964,13 +964,14 @@ use exp_params
 implicit none
 
 real :: dC(nr+1), chi(nr+1), pions(nr+1), pelecs(nr+1)              !! Arrays
-
+real :: Zi(nr+1)
 
 real :: oneoverrhorbarsqdr
-real :: rhoD_p, rhoD_m, rsq_p, rsq_m, dr_p, dr_m   				    !! General variables for the differencing
+real :: rhoD_p, rhoD_m, rsq_p, rsq_m, dr_p, dr_m   				          !! General variables for the differencing
 
-real :: dchidcomp_p, dchidcomp_m, dCompdr_p, dCompdr_m				!! Molar Gradient
+real :: dchidcomp_p, dchidcomp_m, dCompdr_p, dCompdr_m				      !! Molar Gradient
 real :: pions_p, pions_m, XmY_p, XmY_m, dPionsdr_p, dPionsdr_m     	!! Ion Pressure
+real :: ZmY_p, ZmY_m, dPelecsdr_p, dPelecsdr_m                      !! Electron Pressure
 
 real :: epsm = mm_CH/mm_DD
 real :: rho2overnu12(nr+1)
@@ -981,7 +982,11 @@ rho2overnu12(:) = 3.2137e18/(z1*z2)**2/logLambda*(mm_CH*mm_DD*(mm_DD+mm_CH))**0.
 !oneoverdr(:) = 1.0/dr(:,2)
 !dchidcomp(:) = epsm/(epsm+Comp(:,1)-epsm*Comp(:,1))**2.0
 chi(:) = Comp(i,1)/(Comp(i,1)+(1.0-Comp(i,1))/epsm)
-pions(:) = P(:,2)-N_elec(:)/Vol(:,2)*Temp(i,2)
+pelecs(:) = N_elec(:)/Vol(:,2)*Temp(i,2)
+pions(:) = P(:,2)-pelecs(:)
+Zi(:) = (N_av*M(:)*(Comp(:,1)/mm_DD)*ionized(:)*z1)/N_elec(:)
+
+
 
 do i = 1,nr
     oneoverrhorbarsqdr = 1.0/rho(i,2)/(0.5*(r(i+1,2)+r(i,2)))**2.0/dr(i,2)
@@ -1004,7 +1009,7 @@ do i = 1,nr
       dCompdr_p = (Comp(i+1,1) - Comp(i,1))/(0.5*(dr(i+1,2)+dr(i,2)))
 
       !! Ion Pressure Gradient
-	  pions_p = 2.0/(1.0/pions(i+1) + 1.0/pions(i))
+	   pions_p = 2.0/(1.0/pions(i+1) + 1.0/pions(i))
 	  pions_m = pions_p
 
 	  XmY_p = 2.0/(1.0/(chi(i+1)-Comp(i+1,1))+1.0/(chi(i)-Comp(i,1)))
@@ -1012,6 +1017,14 @@ do i = 1,nr
 
 	  dPionsdr_p = (pions(i+1) - pions(i))/(0.5*(dr(i+1,2)+dr(i,2)))
       dPionsdr_m = 0.0
+
+    !! Electron Pressure Gradient
+    ZmY_p = 2.0/(1.0/(Zi(i+1)-Comp(i+1,1)+eps)+1.0/(Zi(i)-Comp(i,1)+eps))
+    ZmY_m = ZmY_p
+
+    dPelecsdr_p = (pelecs(i+1) - pelecs(i))/(0.5*(dr(i+1,2)+dr(i,2)))
+    dPelecsdr_m = 0.0
+    
     
     else if (i .eq. nr) then
       rsq_m = r(i,2)*r(i,2)
@@ -1026,18 +1039,24 @@ do i = 1,nr
 
       dchidcomp_p = dchidcomp_m
 
-      dCompdr_p = 0
+      dCompdr_p = 0.0
       dCompdr_m = (Comp(i,1) - Comp(i-1,1))/(0.5*(dr(i,2)+dr(i-1,2)))
       
       !! Ion Pressure gradient
       pions_m = 2.0/(1.0/pions(i-1) + 1.0/pions(i))
       pions_p = pions_m
 
-	  XmY_m = 2.0/(1.0/(chi(i-1)-Comp(i-1,1))+1.0/(chi(i)-Comp(i,1)))
-	  XmY_p = XmY_m
+	    XmY_m = 2.0/(1.0/(chi(i-1)-Comp(i-1,1))+1.0/(chi(i)-Comp(i,1)))
+	    XmY_p = XmY_m
 
       dPionsdr_m = (pions(i) - pions(i-1))/(0.5*(dr(i,2)+dr(i-1,2)))
-      dPionsdr_p = 0            !! Check this boundary
+      dPionsdr_p = 0.0           !! Check this boundary
+
+      !! Electron Pressure Gradient      
+      ZmY_m = 2.0/(1.0/(Zi(i-1)-Comp(i-1,1)+eps)+1.0/(Zi(i)-Comp(i,1)+eps))
+      ZmY_p = ZmY_m
+      dPelecsdr_p = 0.0
+      dPelecsdr_m = (pelecs(i) - pelecs(i-1))/(0.5*(dr(i,2)+dr(i-1,2)))
 
     else     
       rsq_m = r(i,2)*r(i,2)
@@ -1064,19 +1083,23 @@ do i = 1,nr
 	  XmY_m = 2.0/(1.0/(chi(i-1)-Comp(i-1,1))+1.0/(chi(i)-Comp(i,1)))
 
 	  dPionsdr_p = (pions(i+1) - pions(i))/(0.5*(dr(i+1,2)+dr(i,2)))
-      dPionsdr_m = (pions(i) - pions(i-1))/(0.5*(dr(i,2)+dr(i-1,2)))
+    dPionsdr_m = (pions(i) - pions(i-1))/(0.5*(dr(i,2)+dr(i-1,2)))
 
-      !YmZ_p = 2.0/(1.0/(Comp(i+1)-Comp(i+1,1))+1.0/(chi(i)-Comp(i,1)))
-	  !YmZ_m = 2.0/(1.0/(chi(i-1)-Comp(i-1,1))+1.0/(chi(i)-Comp(i,1)))
 
-	  !dPionsdr_p = (pions(i+1) - pions(i))/(0.5*(dr(i+1,2)+dr(i,2)))
-      !dPionsdr_m = (pions(i) - pions(i-1))/(0.5*(dr(i,2)+dr(i-1,2)))
+  !! Electron Pressure Gradient
+    ZmY_p = 2.0/(1.0/(Zi(i+1)-Comp(i+1,1)+eps)+1.0/(Zi(i)-Comp(i,1)+eps))
+	  ZmY_m = 2.0/(1.0/(Zi(i-1)-Comp(i-1,1)+eps)+1.0/(Zi(i)-Comp(i,1)+eps))
+
+	  dPelecsdr_p = (pelecs(i+1) - pelecs(i))/(0.5*(dr(i+1,2)+dr(i,2)))
+    dPelecsdr_m = (pelecs(i) - pelecs(i-1))/(0.5*(dr(i,2)+dr(i-1,2)))
       
     end if
 
-    dC(i) = oneoverrhorbarsqdr*(rhoD_p*rsq_p*&
-    	(dchidcomp_p*dCompdr_p+0.0*1.0/pions_p*XmY_p*dPionsdr_p)-&
-    	(dchidcomp_m*dCompdr_m+0.0*1.0/pions_m*XmY_m*dPionsdr_m)&
+    !print *, "Zmy_p", Zmy_p
+
+    dC(i) = oneoverrhorbarsqdr*(-rhoD_p*rsq_p*&
+    	(dchidcomp_p*dCompdr_p-1.0/pions_p*(XmY_p*dPionsdr_p))-&
+    	(dchidcomp_m*dCompdr_m-1.0/pions_m*(XmY_m*dPionsdr_m))&
     	*rhoD_m*rsq_m)
     !print *,'oneoverrhorbarsqdr,dComp,rho2overnu12 = ',oneoverrhorbarsqdr(i),dComp(i),rho2overnu12(i)
 
