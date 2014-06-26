@@ -55,7 +55,10 @@
 
 MODULE prec_param
 
-  INTEGER, PARAMETER  ::  prec = 8
+  use, intrinsic :: iso_fortran_env
+  integer, parameter :: qp = REAL128
+  !INTEGER, PARAMETER  ::  prec = 8
+
 
 END MODULE prec_param
 
@@ -65,15 +68,15 @@ MODULE exp_params
   
   INTEGER             ::  i, it, itprt, it_special_prtOut
   INTEGER             ::  nr, nmax_tsteps
-  REAL(prec)          ::  time, dt, tmax, timeold, t_out_prt, Lr  
+  REAL(qp)          ::  time, dt, tmax, timeold, t_out_prt, Lr  
 
   LOGICAL             ::  nanDetected
-  REAL(prec)          ::  gamma, cl, cQ, du, inv_rho_bar, dr_bar, ion_frac
+  REAL(qp)          ::  gamma, cl, cQ, du, inv_rho_bar, dr_bar, ion_frac
   INTEGER             ::  forced_zones, in_bound, in_forced, visc_sw, diff_sw, hf_sw
-  REAL(prec)          ::  init_T_gas, init_press, rho_fac, vol_fac, dtheta, dphi, pi, r_bar, r_bar_sq
-  REAL(prec)          ::  out_press, out_density, out_temp, cfl_fac, init_dt, init_watts_pulse
-  REAL(prec)          ::  highestPress, highestTemp, highestDensity, highEnergyTime, time_of_highestTemp
-  REAL(prec)          ::  m1, m2, z1, z2
+  REAL(qp)          ::  init_T_gas, init_press, rho_fac, vol_fac, dtheta, dphi, pi, r_bar, r_bar_sq
+  REAL(qp)          ::  out_press, out_density, out_temp, cfl_fac, init_dt, init_watts_pulse
+  REAL(qp)          ::  highestPress, highestTemp, highestDensity, highEnergyTime, time_of_highestTemp
+  REAL(qp)          ::  m1, m2, z1, z2
   CHARACTER(len=100)  ::  outfile, infile
   CHARACTER(len=7)    ::  dir
   CHARACTER(len=28)   ::  path = '/Users/archis/Documents/lanl/'
@@ -89,10 +92,10 @@ MODULE phys_const
   !                               mm_DD    = molar mass of deuterium in [kg/mol]
   !                               mm_CH    = molar mass of the shell material [kg/mol]
   !                               JeV_conv = conversion factor between joules and eV [J/eV]
-  REAL(prec),PARAMETER  :: k_boltz = 8.6173324e-5, N_av = 6.02214129e23,     &
+  REAL(qp),PARAMETER  :: k_boltz = 8.6173324e-5, N_av = 6.02214129e23,     &
                          &    JeV_conv = 1.602e-19, a_sbc = 7.5657e-16,      &
                          &    mm_DD = 4.029e-3,  mm_CH = 13.018947e-3,       &
-                         &    eps = 1.e-15, eps_elecs = 1.e-15
+                         &    eps = 1.e-15, eps_elecs = 1.e-15, eps0 = 8.854187817e-12
 
 END MODULE phys_const
 
@@ -101,10 +104,10 @@ MODULE data_arrays
 
   use prec_param
 
-  REAL(prec), ALLOCATABLE  ::  r(:,:), u(:,:), rho(:,:), Temp(:,:), P(:,:), Comp(:,:)
-  REAL(prec), ALLOCATABLE  ::  dr(:,:), Vol(:,:), q(:), Cs(:), N_part(:), M(:), vel_fac(:)
-  REAL(prec), ALLOCATABLE  ::  ionized(:), N_elec(:), subdiag(:), diag(:), supdiag(:)
-  REAL(prec), ALLOCATABLE  ::  vel_RHS(:), TempIC(:), temp_RHS(:), forcing(:), r_sq(:)
+  REAL(qp), ALLOCATABLE  ::  r(:,:), u(:,:), rho(:,:), Temp(:,:), P(:,:), Comp(:,:)
+  REAL(qp), ALLOCATABLE  ::  dr(:,:), Vol(:,:), q(:), Cs(:), N_part(:), M(:), vel_fac(:)
+  REAL(qp), ALLOCATABLE  ::  ionized(:), N_elec(:), subdiag(:), diag(:), supdiag(:)
+  REAL(qp), ALLOCATABLE  ::  vel_RHS(:), TempIC(:), temp_RHS(:), forcing(:), r_sq(:)
 
 END MODULE data_arrays
 
@@ -128,7 +131,7 @@ PROGRAM eVsOneD_ICF
   call initialize
 
   ! write initial data to file
-  call write_data_matlab
+  !call write_data_matlab
   call write_data_pyout1
 
 
@@ -160,7 +163,7 @@ PROGRAM eVsOneD_ICF
     ! write to file (uncomment if statement to start saving data after certain time)
     !if (time .GT. 3.227e-9) then
     if (mod(it,itprt) .EQ. 0) then
-      call write_data_matlab
+      !call write_data_matlab
       call write_data_pyout1
       print *, 'it, time, dt =',it, time, dt
     end if
@@ -194,11 +197,11 @@ SUBROUTINE read_params
 
   INTEGER             ::  number_r_cells, nmax_time_steps, it_steps_per_print, forced_region_zones
   INTEGER             ::  viscosity_sw, heatflux_sw, diffusion_sw
-  REAL(prec)          ::  domain_size, cfl_factor, initial_time_step, adiabatic_index, time_max, t_out_special_print
-  REAL(prec)          ::  inner_boundary, initial_pressure, initial_T_gas, density_change
-  REAL(prec)          ::  initial_watts_pulse, laser_absorbed_frac, laser_watts_pulse
-  REAL(prec)          ::  ionization_fraction, outerBC_density, outerBC_temp
-  REAL(prec)          ::  mass1, mass2, charge1, charge2
+  REAL(qp)          ::  domain_size, cfl_factor, initial_time_step, adiabatic_index, time_max, t_out_special_print
+  REAL(qp)          ::  inner_boundary, initial_pressure, initial_T_gas, density_change
+  REAL(qp)          ::  initial_watts_pulse, laser_absorbed_frac, laser_watts_pulse
+  REAL(qp)          ::  ionization_fraction, outerBC_density, outerBC_temp
+  REAL(qp)          ::  mass1, mass2, charge1, charge2
   CHARACTER(len=100)  ::  output_file_name
 
   ! create namelist of items in parameter file 
@@ -434,7 +437,7 @@ SUBROUTINE solve_eqns
   use data_arrays
 
   !real compute_mass_fraction(nr+1)
-  real dC(nr+1)
+  real (qp) :: dC(nr+1)
 
   ! update time
   time = time + dt
@@ -589,11 +592,11 @@ SUBROUTINE visc_mat_coeffs (a,b,c)
   use phys_const
   use data_arrays
 
-  REAL(prec), DIMENSION(nr), INTENT(out)  ::  a,b,c
-  REAL(prec)                              ::  comb_dr, alpha, beta1, mu_plus, mu_minus
-  REAL(prec)                              ::  eta_plus, eta_minus, r_plus, r_minus
-  REAL(prec)                              ::  Temp_eV, Temp_eV_minus
-  REAL(prec), PARAMETER                   ::  kb_ergeV = 1.6e-12
+  REAL(qp), DIMENSION(nr), INTENT(out)  ::  a,b,c
+  REAL(qp)                              ::  comb_dr, alpha, beta1, mu_plus, mu_minus
+  REAL(qp)                              ::  eta_plus, eta_minus, r_plus, r_minus
+  REAL(qp)                              ::  Temp_eV, Temp_eV_minus
+  REAL(qp), PARAMETER                   ::  kb_ergeV = 1.6e-12
 
   Temp_eV        = Temp(i,1)/JeV_conv    ! convert temperature to eV
   Temp_eV_minus  = Temp(i-1,1)/JeV_conv  ! convert temperature to eV 
@@ -628,10 +631,10 @@ SUBROUTINE temp_mat_coeffs (a,b,c)
   use phys_const
   use data_arrays
 
-  REAL(prec), DIMENSION(nr+1), INTENT(out)  ::  a,b,c
-  REAL(prec)                                ::  dr_minus, dr_plus, alpha, beta1
-  REAL(prec)                                ::  kappa, Temp_eV_minus, Temp_eV, Temp_eV_plus, logLambda
-  REAL(prec), PARAMETER                     ::  kb_ergeV = 1.6e-12, ErgJ_conv = 1e-7, ccM_conv = 1e-6, gKg_conv = 1e-3, &
+  REAL(qp), DIMENSION(nr+1), INTENT(out)  ::  a,b,c
+  REAL(qp)                                ::  dr_minus, dr_plus, alpha, beta1
+  REAL(qp)                                ::  kappa, Temp_eV_minus, Temp_eV, Temp_eV_plus, logLambda
+  REAL(qp), PARAMETER                     ::  kb_ergeV = 1.6e-12, ErgJ_conv = 1e-7, ccM_conv = 1e-6, gKg_conv = 1e-3, &
 m_elec = 9.10938e-28
 
   
@@ -678,10 +681,10 @@ SUBROUTINE comp_mat_coeffs (a,b,c)
   use phys_const
   use data_arrays
 
-  REAL(prec), DIMENSION(nr+1), INTENT(out)  ::  a,b,c
-  REAL(prec)                                ::  dr_minus, dr_plus, alpha, beta1, Temp_keV, Temp_eV
-  REAL(prec)                                ::  diffc, rho_plus, rho_minus, DD_mass, CH_mass
-  REAL(prec)                                ::  n1, n2, epsm, chi, coll_freq, logLambda, diffconst
+  REAL(qp), DIMENSION(nr+1), INTENT(out)  ::  a,b,c
+  REAL(qp)                                ::  dr_minus, dr_plus, alpha, beta1, Temp_keV, Temp_eV
+  REAL(qp)                                ::  diffc, rho_plus, rho_minus, DD_mass, CH_mass
+  REAL(qp)                                ::  n1, n2, epsm, chi, coll_freq, logLambda, diffconst
 
 
   Temp_keV = Temp(i,2)/(1000.*JeV_conv)  ! convert temperature to keV
@@ -756,9 +759,9 @@ SUBROUTINE tri_diag (a,b,c,d,u,n)
 
   INTEGER                                ::  j
   INTEGER, INTENT(in)                    ::  n
-  REAL(prec), DIMENSION(n), INTENT(in)   ::  a, b, c, d
-  REAL(prec), DIMENSION(n), INTENT(out)  ::  u
-  REAL(prec)                             ::  bet, gam(n)
+  REAL(qp), DIMENSION(n), INTENT(in)   ::  a, b, c, d
+  REAL(qp), DIMENSION(n), INTENT(out)  ::  u
+  REAL(qp)                             ::  bet, gam(n)
 
   if (b(1) .EQ. 0) then
     print *, 'tridiag failed w/ b(1) = 0'
@@ -784,37 +787,16 @@ SUBROUTINE tri_diag (a,b,c,d,u,n)
 
 END SUBROUTINE tri_diag
 
-SUBROUTINE write_data_matlab     !     matlab format by Ryan Moll, July, 2013
-
-  use exp_params
-  use phys_const
-  use data_arrays
-
-  ! write data to file
-  do i = 1,(nr+1)
-    if ( (r(i,1) .NE. r(i,1))       .OR. &
-         (u(i,1) .NE. u(i,1))       .OR. &
-         (Temp(i,1) .NE. Temp(i,1)) .OR. &
-         (rho(i,1) .NE. rho(i,1))   .OR. &
-         (P(i,1) .NE. P(i,1))            &
-       ) then
-         nanDetected = .TRUE.
-    end if 
-    write(20,'(7e14.6)') time, r(i,1), u(i,1), Temp(i,1)/JeV_conv, (rho(i,1)*N_part(i))/((1.e6)*M(i)), P(i,1), Comp(i,1)
-  end do
-
-END SUBROUTINE write_data_matlab
-
 SUBROUTINE write_data_pyout1     !     python output, eV, Sept, 2013
 
   use exp_params
   use phys_const
   use data_arrays
 
-!  REAL(prec), ALLOCATABLE  ::  dTdr(:)
-  REAL(prec) :: dTdr(nr-2,1), dCdr(nr-2,1)
-  REAL(prec) :: kappa, diff, epsm, Temp_eV, chi, coll_freq
-  REAL(prec) :: Temp_Interface, Comp_Interface
+!  REAL(qp), ALLOCATABLE  ::  dTdr(:)
+  REAL(qp) :: dTdr(nr-2,1), dCdr(nr-2,1)
+  REAL(qp) :: kappa, diff, epsm, Temp_eV, chi, coll_freq
+  REAL(qp) :: Temp_Interface, Comp_Interface
   integer    :: ir
        
 	write (11,'(200e14.6)')   ( time*1.e9, i = 1,nr )  			    !  11 => 'time_xtOut' in ns
@@ -822,41 +804,15 @@ SUBROUTINE write_data_pyout1     !     python output, eV, Sept, 2013
 	write (13,'(200e14.6)')     rho(1:nr,1)          		            !  13 => 'density_xtOut'
 	write (14,'(200e14.6)')     P(1:nr,1)/rho(1:nr,1)/(gamma - 1.)             !  14 => 'ein_xtOut'
 	write (15,'(200e14.6)')     P(1:nr,1)                                      !  15 => 'pres_xtOut'
-	write (16,'(200e14.6)')     Temp(1:nr,1)/Jev_conv                          !  16 => 'tev_xtOut'
+	write (16,'(200e14.6)')     Temp(1:nr,1)/JeV_conv                          !  16 => 'tev_xtOut'
   write (17,'(200e14.6)')     u(1:nr,1)         				    !  17 => 'velr_xtOut'
   write (18,'(200e14.6)')     Comp(1:nr,1)         			    !  18 => 'comp_xtOut'
   write (19,'(200e14.6)')     dr(1:nr,1)         			    !  19 => 'dr_xtOut'
-
-!kappa        = (1.e2)*(.2)*(1.933e21)*(Temp_eV**(5./2))  ! plasma thermal conduction coefficient
-
-!  do i=2,nr-1
-!    Temp_Interface=0.5*(Temp(i-1,1)+Temp(i,1))/JeV_conv
-!                  print *, Temp_Interface, 'eV'
-!    kappa=(1.e2)*(.2)*(1.933e21)*(Temp_Interface**(5./2))
-!                  print *, kappa, 'Plasma Thermal Conductivities'
-!    dTdr(i-1,1)=-kappa*((Temp(i-1,1)-Temp(i,1))/dr(i,1))
-
-!    Temp_eV = Temp(i,1)/(JeV_conv)
-!	  epsm = mm_CH/mm_DD
-!	  chi = Comp(i,1)/(Comp(i,1)+(1.0-Comp(i,1))/epsm)
-
-!	  coll_freq = 4e16 * (1.0*z2)**2*5/ (mm_DD*(mm_DD*mm_CH)*1e-6/(mm_DD+mm_CH)*&
-!	                (Temp_eV/mm_DD*1e-3+Temp_eV/mm_CH*1e-3)**1.5)
-
-!	  diff = epsm/(epsm+Comp(i,1)-epsm*Comp(i,1))**2*P(i,1)*(1-Comp(i,1))/coll_freq
-!    Comp_Interface=0.5*(Comp(i-1,1)+Comp(i,1))
-!                  print *, Temp_Interface, 'eV'
-!                  print *, kappa, 'Plasma Thermal Conductivities'
-!    dCdr(i-1,1)=-1*((Comp(i-1,1)-Comp(i,1))/dr(i,1))
-!  end do
-		
-!	write (98,'(200e14.6)')     dCdr(1:nr-2,1)
-!  write (99,'(200e14.6)')     dTdr(1:nr-2,1)
          
-  do ir = 2, nr
-    if ( r(ir,1) .lt. 500.e-6)&      
-      write (21,'(3e14.6)') time*1.e9, r(ir,1)*1.e6, Temp(ir,1)/Jev_conv
-  end do
+!  do ir = 2, nr
+!    if ( r(ir,1) .lt. 500.e-6)&      
+!      write (21,'(3e14.6)') time*1.e9, r(ir,1)*1.e6, Temp(ir,1)/Jev_conv
+!  end do
 
 
 END SUBROUTINE write_data_pyout1
@@ -935,54 +891,93 @@ SUBROUTINE finish
 END SUBROUTINE finish
 
 !    ...............................................................................
+real (qp) function ion_density_calc(massfrac,m,which_ion)
+  
+  use prec_param
+  implicit none 
+  real (qp)   ::  massfrac, m 
+  integer     ::  which_ion
+  !real (qp) ::  ion_density_calc
 
-   function rho2_per_nu12(m1,m2,z1,z2,tev1,tev2,teve)
-   !   computes (rho2 / nu12) to modify binary diffusion coefficient adjusting to mass averaged u
-   !   nu12 is collision rate of test particle 1 on 2 w/ kinetic factor 0.29 for low z - high z diffusion coefficient
-   !   use n2 = n1, etc for self collision rates in visc. and thermal conduction
-   
-   implicit none
-   real*4   n1,n2,m1,m2,z1,z2,tev1,tev2,teve,m12
-   real*4   rho2_per_nu12, coulog
-   real*4  ::  bk = 1.602e-19, avogn = 6.022e23, eps0 = 8.854e-12
-   real*4  ::  KperP, debyeL, debyeco =  1.355e-11   !   = sqrt [ 2*eps0/(10^6*Avogn*bk) ]
-   real*4  ::  fnuco = 4.1e16    !  4.1e-16 => 4 pi eps0^2 / e^4 /sqrt[mp] / bk**(1.5)
-   real*4  ::  two = 2., one = 1., pi = 3.1415925
-   
-      debyeL = debyeco/ sqrt( ( n1*z1 + n2*z2) * ( one/tev1 + one/teve ) )
-      KperP  = 12.*pi*eps0/bk*tev1*debyeL/z1/z2   !   kinetic particle energy to potential energy at debye radius
-      coulog = 0.5*log( one + KperP*KperP )
-      m12 = m1*m2/(m1+m2)
-      print *,'tev1,tev2,teve = ',tev1,tev2,teve
-      print *,'debyeL,KperP,coulog = ',debyeL,KperP,coulog
-      rho2_per_nu12 =    fnuco * z1*z1*z2*z2*coulog/ ( m1*m12*(tev1/m1 + tev2/m2)**1.5 ) *0.29  ! hard wired high z-low z kinetic co
-   end function rho2_per_nu12
+  ion_density_calc = (-1.0*which_ion+1)*(massfrac/m)+which_ion*(1.0-massfrac)/m
+
+  return
+
+end
+
+real (qp) function logLambda_calc(totaln,zbar,tempe)
+  use prec_param
+  use phys_const
+
+  implicit none
+  real (qp) :: totaln, zbar, massfrac, tempe
+!  real (qp) :: zbar
+
+ ! zbar = massfrac*z1+(1.0-massfrac)*z2
+  !totaln = n1+n2
+
+  logLambda_calc = log(106.629*N_av*(totaln)*(tempe*eps0/JeV_conv**2.0/N_av/totaln/zbar)**1.5)
+
+  logLambda_calc = max(1.0,logLambda_calc)
+ 
+  return
+end
+
+
+real (qp) function rho2overnu12_calc(m1,m2,z1,z2,temp1,temp2,tempe,logLambda)
+  
+  use prec_param
+  
+  implicit none 
+  real (qp) :: m1, m2, z1, z2, temp1, temp2, tempe, logLambda
+
+  rho2overnu12_calc = 0
+
+
+  !ion_density_calc = (-1.0*which_ion+1)*(massfrac/m)+which_ion*(1.0-massfrac)/m
+
+  return
+
+end
 
 subroutine compute_mass_fraction(dC)
 
+use prec_param
 use phys_const
 use data_arrays
 use exp_params
 implicit none
 
-real :: dC(nr+1), chi(nr+1), pions(nr+1), pelecs(nr+1)              !! Arrays
-real :: Zi(nr+1)
+real (qp) ::  dC(nr+1), chi(nr+1), pions(nr+1), pelecs(nr+1)              !! Arrays
+real (qp) ::  Zi(nr+1)
 
-real :: oneoverrhorbarsqdr
-real :: rhoD_p, rhoD_m, rsq_p, rsq_m, dr_p, dr_m   				          !! General variables for the differencing
+real (qp) ::  oneoverrhorbarsqdr
+real (qp) ::  rhoD_p, rhoD_m, rsq_p, rsq_m, dr_p, dr_m   				          !! General variables for the differencing
 
-real :: dchidcomp_p, dchidcomp_m, dCompdr_p, dCompdr_m				      !! Molar Gradient
-real :: pions_p, pions_m, XmY_p, XmY_m, dPionsdr_p, dPionsdr_m     	!! Ion Pressure
-real :: ZmY_p, ZmY_m, dPelecsdr_p, dPelecsdr_m                      !! Electron Pressure
+real (qp) ::  dchidcomp_p, dchidcomp_m, dCompdr_p, dCompdr_m				      !! Molar Gradient
+real (qp) ::  pions_p, pions_m, XmY_p, XmY_m, dPionsdr_p, dPionsdr_m     	!! Ion Pressure
+real (qp) ::  ZmY_p, ZmY_m, dPelecsdr_p, dPelecsdr_m                      !! Electron Pressure
 
-real :: epsm = mm_CH/mm_DD
-real :: rho2overnu12(nr+1)
-real :: logLambda
+real (qp) ::  epsm = mm_CH/mm_DD  
 
-logLambda = 5.0 !log(8.799e29*(Temp(:,2)/(Comp(:,1)*z1+(1-Comp(:,1))*z2))**1.5/(ni+nj)**0.5)
-rho2overnu12(:) = 3.2137e18/(z1*z2)**2/logLambda*(mm_CH*mm_DD*(mm_DD+mm_CH))**0.5*Temp(:,2)**1.5
+real (qp) ::  ion_density_calc, logLambda_calc
+real (qp) ::  n1(nr+1), n2(nr+1), rho2overnu12(nr+1), logLambda(nr+1)
+
+integer ii
+
+do ii = 1,nr
+    n1(ii) = ion_density_calc(Comp(ii,1),mm_DD,0)
+    n2(ii) = ion_density_calc(Comp(ii,1),mm_CH,1)
+    logLambda(ii) = logLambda_calc(n1(ii)+n2(ii),Comp(ii,1)*z1+(1.0-Comp(ii,1))*z2,Temp(ii,1))
+end do
+
+!logLambda = 5.0 !log(8.799e29*(Temp(:,2)/(Comp(:,1)*z1+(1-Comp(:,1))*z2))**1.5/(ni+nj)**0.5)
+rho2overnu12(:) = 3.2137e18/(z1*z2)**2/logLambda(:)*(mm_CH*mm_DD*(mm_DD+mm_CH))**0.5*Temp(:,2)**1.5
 !oneoverdr(:) = 1.0/dr(:,2)
 !dchidcomp(:) = epsm/(epsm+Comp(:,1)-epsm*Comp(:,1))**2.0
+
+
+
 chi(:) = Comp(i,1)/(Comp(i,1)+(1.0-Comp(i,1))/epsm)
 pelecs(:) = N_elec(:)/Vol(:,2)*Temp(i,2)
 pions(:) = P(:,2)-pelecs(:)
@@ -991,8 +986,19 @@ Zi(:) = (N_av*M(:)*(Comp(:,1)/mm_DD)*ionized(:)*z1)/N_elec(:)+eps_elecs
 
 
 do i = 1,nr
+
+
     oneoverrhorbarsqdr = 1.0/rho(i,2)/(0.5*(r(i+1,2)+r(i,2)))**2.0/dr(i,2)
-    !print *, "Z(i)", N_elec(i)
+    
+    
+
+    
+
+    !print *, "logLambda(i)", logLambda(i)
+    !print *, "n2(i)", rho2overnu12(i)
+    
+
+
     if (i .eq. 1) then
       rsq_m = r(i,2)*r(i,2)
       rsq_p = r(i+1,2)*r(i+1,2)
