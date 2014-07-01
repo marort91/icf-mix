@@ -56,7 +56,7 @@
 MODULE prec_param
 
   use, intrinsic :: iso_fortran_env
-  integer, parameter :: qp = REAL128
+  integer, parameter :: qp = REAL64
   !INTEGER, PARAMETER  ::  prec = 8
 
 END MODULE prec_param
@@ -514,7 +514,7 @@ SUBROUTINE solve_eqns
     do i = 1,nr
       r_bar = .5*(r(i+1,2)+r(i,2))
       r_bar_sq = r_bar*r_bar
-      call comp_mat_coeffs(subdiag,diag,supdiag)  
+      call comp_mat_coeffs_first(subdiag,diag,supdiag)  
     end do
   
     call tri_diag(subdiag,diag,supdiag,Comp(1:nr,1),Comp(1:nr,2),nr)
@@ -685,6 +685,85 @@ SUBROUTINE temp_mat_coeffs (a,b,c)
 
 END SUBROUTINE temp_mat_coeffs
 
+SUBROUTINE comp_mat_coeffs_first (a,b,c)
+
+  use prec_param
+  use exp_params
+  use phys_const
+  use data_arrays
+
+  REAL(qp), DIMENSION(nr+1), INTENT(out)  ::  a,b,c
+  REAL(qp)                                ::  dr_minus, dr_plus, alpha, beta1, Temp_keV
+  REAL(qp)                                ::  D, rho_plus, rho_minus, DD_mass, CH_mass
+
+  real(qp) :: dchidcomp, dchidcomp_p, dchidcomp_m, rhoDdr, rhoDdr_p, rhoDdr_m, rho2overnu12_calc
+  real(qp) :: epsm = mm_DD/mm_CH
+  real(qp) :: logLambda
+
+  Temp_keV = Temp(i,2)/(1000.*JeV_conv)  ! convert temperature to keV
+  DD_mass = mm_DD/(1 + ionized(i))       ! calculating mass per particle
+  CH_mass = mm_CH/(1 + ionized(i))       ! calculating mass per particle
+
+  logLambda = 5.0
+
+  if (i .EQ. 1) then
+    dr_minus = dr(i,2)
+    rho_minus = rho(i,2)
+    
+    dchidcomp_m = epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0
+    rhoDdr_m = rho2overnu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(i,1),logLambda)/rho(i,1)/dr(i,2)
+
+  else 
+    dr_minus = .5*(dr(i,2) + dr(i-1,2))
+    rho_minus = .5*(rho(i,2) + rho(i-1,2))
+    
+    dchidcomp_m = epsm/(Comp(i-1,1)+epsm*(1.0-Comp(i-1,1)))**2.0
+    rhoDdr_m = rho2overnu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(i-1,1),logLambda)*P(i-1,1)/rho(i-1,1)/dr(i-1,2)
+
+  end if
+  
+  dchidcomp = epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0
+  dchidcomp_p = epsm/(Comp(i+1,1)+epsm*(1.0-Comp(i+1,1)))**2.0
+  
+  rhoDdr = rho2overnu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(i,1),logLambda)*P(i,1)/rho(i,1)/dr(i,2)
+  rhoDdr_p = rho2overnu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(i+1,1),logLambda)*P(i+1,1)/rho(i+1,1)/dr(i+1,2)
+
+  rhoDdr_p = 2.0/(1.0/rhoDdr_p+1.0/rhoDdr)
+  rhoDdr_m = 2.0/(1.0/rhoDdr_m+1.0/rhoDdr)
+
+  dchidcomp_p = 2.0/(1.0/dchidcomp+1.0/dchidcomp_p)
+  dchidcomp_m = 2.0/(1.0/dchidcomp+1.0/dchidcomp_m)
+
+
+
+
+
+  dr_plus  = .5*(dr(i+1,2) + dr(i,2))
+  rho_plus = .5*(rho(i+1,2) + rho(i,2))
+  alpha    = dt
+  D        = (1.e-4)*2470.*(Temp_keV**(5./2))/      &        ! diffusion coefficent- eV corrected 130930
+             (sqrt(DD_mass)*(1.e-3)*rho(i,2)*(2.4*Comp(i,2)/mm_DD + 12.25*(1.-Comp(i,2))/mm_CH))  !  12.25 = 3.5**2
+  beta1    = 1/(rho(i,2)*r_bar_sq*dr(i,2))
+
+  ! code for handling boundaries properly (shuld be implemented in other plasma routines)
+  if (i .EQ. 1) then
+    a(i) = 0
+  else
+    !a(i)   = -alpha*beta1*r_sq(i)*rho_minus*D/dr_minus 
+    a(i)   = -alpha*beta1*r_sq(i)*rhoDdr_m*dchidcomp_m
+  end if
+
+  if (i .EQ. nr) then
+    c(i) = 0
+  else
+    !c(i) = -alpha*beta1*r_sq(i+1)*rho_plus*D/dr_plus
+    c(i) = -alpha*beta1*r_sq(i+1)*rhoDdr_p*dchidcomp_p
+  end if
+  b(i)   = 1. - (a(i) + c(i))
+
+END SUBROUTINE comp_mat_coeffs_first
+
+
 SUBROUTINE comp_mat_coeffs (a,b,c)
 
   use prec_param
@@ -850,7 +929,7 @@ use phys_const
   print *, 'Highest pressure at origin     : ', highestPress/1.0e9
   print *, 'Highest temperature at origin  : ', highestTemp / JeV_conv
   Print *, 'Highest temperature occurs at  : ', time_of_highestTemp
-  print *, 'Highest density at origin      : ', highestDensity * (N_part(1)/(1+ionized(1))*(1+ionized(1)*N_elec(1))) & 
+  print *, 'Highest density at origin      : ', highestDensity * (N_part(1)/(1+ionized(1))*(1+ionized(1)*z1)) & 
   / ((1e6)*M(1))  
 
   print *,'optional write out solutions at last time step'
@@ -938,18 +1017,18 @@ real (qp) function logLambda_calc(totaln,zbar,tempe)
 end
 
 
-real (qp) function rho2overnu12_calc(m1,m2,z1,z2,temp1,temp2,tempe,logLambda)
+real (qp) function rho2overnu12_calc(m1,m2,Zcharge1,Zcharge2,temp1,logLambda)
   
   use prec_param
   use phys_const
   !use exp_params
   
   implicit none 
-  real (qp) :: m1, m2, z1, z2, temp1, temp2, tempe, logLambda
+  real (qp) :: m1, m2, Zcharge1, Zcharge2, temp1, logLambda
   real (qp) :: pi = 2.0 * acos(0.0)
 
   rho2overnu12_calc = (2.0/pi)**0.5*(4.0*pi/3.0)
-  rho2overnu12_calc = rho2overnu12_calc*(z1*z2*JeV_conv*JeV_conv/4.0/pi/eps0)**2.0
+  rho2overnu12_calc = rho2overnu12_calc*(Zcharge1*Zcharge2*JeV_conv*JeV_conv/4.0/pi/eps0)**2.0
   rho2overnu12_calc = rho2overnu12_calc*logLambda/m1**0.5/temp1**1.5
   rho2overnu12_calc = rho2overnu12_calc*(m2/(m1+m2))**0.5
   rho2overnu12_calc = m2/rho2overnu12_calc
@@ -1072,7 +1151,7 @@ subroutine compute_mass_fraction(dC)
     
     logLambda(ii) = logLambda_calc(n1(ii)+n2(ii),Comp(ii,1)*z1+(1.0-Comp(ii,1))*z2,Temp(ii,1))
     
-    rho2overnu12(ii) = rho2overnu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(ii,1),Temp(ii,1),Temp(ii,1),logLambda(ii))
+    rho2overnu12(ii) = rho2overnu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(ii,1),logLambda(ii))
     
     nue2(:) = nuei_calc(z2,n2(ii),Temp(ii,1),logLambda(ii))
     nue1(:) = nuei_calc(z1,n1(ii),Temp(ii,1),logLambda(ii))
@@ -1103,7 +1182,7 @@ subroutine compute_mass_fraction(dC)
     !tempr = rho2overnu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(i,1),Temp(i,1),Temp(i,1),logLambda(i))
 
     !if (mod(it,1000).eq.0) then  
-       print *, "rho2overnu12", nu12(i)
+    !   print *, "rho2overnu12", nu12(i)
     !   print *, "tempr", tempr
     !  print *,'step'
     !end if
