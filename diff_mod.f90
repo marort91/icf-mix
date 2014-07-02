@@ -387,7 +387,7 @@ CHARACTER(len=100)  ::  output_file_name
   ionized(in_forced:nr)            =  ion_frac
   N_elec(1:in_bound)               = (N_av/mm_DD) * M(1:in_bound)*z1    !   odd name - used as zbar  
   N_elec((in_bound+1):nr)          = (N_av/mm_CH) * M((in_bound+1):(nr+1))*z2    !     but zbar by material not by zone - need to revise
-  N_elec(:)                        =  N_elec(:)*ionized(:)+eps_elecs
+  N_elec(:)                        =  N_elec(:)*ionized(:)!+eps_elecs
   N_part(in_forced:nr)             =  (1+ionized(in_forced:nr)*z2) *        &
                                       N_part(in_forced:nr)       !   add electrons to particle pressure 
                                                                  !      assuming in_forced region is ionized
@@ -440,6 +440,9 @@ SUBROUTINE solve_eqns
 
   ! update time
   time = time + dt
+
+
+
 
   ! find artificial viscosity
   do i = 1,(nr+1)
@@ -517,11 +520,11 @@ SUBROUTINE solve_eqns
       call comp_mat_coeffs_first(subdiag,diag,supdiag)  
     end do
   
-    call tri_diag(subdiag,diag,supdiag,Comp(1:nr,1),Comp(1:nr,2),nr)
+    !call tri_diag(subdiag,diag,supdiag,Comp(1:nr,1),Comp(1:nr,2),nr)
   
-    do i = 1, nr
-      if ( Comp(i,2) .lt. eps ) Comp(i,2) = 0.   !   python plotter doesn't like comp => 1.e-102
-    enddo
+    !do i = 1, nr
+    !  if ( Comp(i,2) .lt. eps ) Comp(i,2) = 0.   !   python plotter doesn't like comp => 1.e-102
+    !enddo
   
   else 
     Comp(:,2) = Comp(:,1)
@@ -529,16 +532,25 @@ SUBROUTINE solve_eqns
   
   call compute_mass_fraction(dC)
 
-  !if (mod(it,200).eq.0) then
-  !  do i=1,nr
-  !    print *,'dComp = ',dC(i)
-  !    print *,'dCi =' , (Comp(i,2)-Comp(i,1))/dt
-  !  end do
+ ! if (mod(it,5).eq.0) then
+    !do i=1,nr
+    !  print *,'dCexplicit = ',dC(i)
+    !  print *,'dCompImplicit =' , (Comp(i,2)-Comp(i,1))/dt
+    !  print *,' '
+    !end do
 
   !  print *,'step'
+ !end if
+
+  Comp(:,2) = Comp(:,1) + dt*dC(:)
+
+  !if (mod(it,5).eq.0) then
+  !  do i=1,nr
+  !    print *,'C = ',Comp(i,2)
+  !    print *,' '
+  !  end do
   !end if
 
-  !Comp(:,2) = Comp(:,1) + dt*dC(:)
   Comp((nr+1),2) = 0
 
   ! determine if zone is ionized based on temperature change and change N_part due to new Comp
@@ -548,14 +560,29 @@ SUBROUTINE solve_eqns
     end if
   end do
 
-  N_elec(:) = (z1*Comp(:,2)/mm_DD + z2*(1-Comp(:,2))/mm_CH)*ionized(:)*M(:)*N_av+eps_elecs    !  ne - needed in mixing!
-  N_part(:) = N_av*M(:)*(  Comp(:,2)/ mm_DD* ( 1.+ionized(:)*z1 ) +(1.-Comp(:,2))/ mm_CH* ( 1.+ionized(:)*z2 )  )    !   z1 = 1 and z2 = z2 hardwired in
-  !   do i=1,nr
-  !    print *,'Npart = ',N_part(i)
-  !    print *,'Nelec = ',N_elec(i)
-  !    print *,'NT = ',N_elec(i)+N_part(i)
-  !    print *,'oC =' , N_av*M(i)*(  Comp(i,2)/ mm_DD* ( 1.+ionized(i)*z1 ) + (1.-Comp(i,2))/ mm_CH* ( 1.+ionized(i)*z2 )  )
-  !  end do
+      if (mod(it,5147).eq.0) then  
+     do i=1,nr
+      print *,'Comp = ',Comp(i,2)
+      !print *,'Nelec = ',N_elec(i)
+      !print *,'NT = ',N_elec(i)+N_part(i)
+      !print *,'oC =' , N_av*M(i)*(  Comp(i,2)/ mm_DD* ( 1.+ionized(i)*z1 ) + (1.-Comp(i,2))/ mm_CH* ( 1.+ionized(i)*z2 )  )
+    end do
+  end if 
+
+  N_elec(:) = (z1*Comp(:,2)/mm_DD + z2*(1-Comp(:,2))/mm_CH)*ionized(:)*M(:)*N_av!+eps_elecs    !  ne - needed in mixing!
+  N_part(:) = N_av*M(:)*(Comp(:,2)/mm_DD*(1.+ionized(:)*z1)+(1.-Comp(:,2))/mm_CH*(1.+ionized(:)*z2))    !   z1 = 1 and z2 = z2 hardwired in
+
+     if (mod(it,5147).eq.0) then  
+     do i=1,nr
+      !print *,'Comp = ',Comp(i,2)
+      print *,'Nelec = ',N_elec(i)
+      print *,'NT = ', N_part(i)
+      !print *,'oC =' , N_av*M(i)*(  Comp(i,2)/ mm_DD* ( 1.+ionized(i)*z1 ) + (1.-Comp(i,2))/ mm_CH* ( 1.+ionized(i)*z2 )  )
+    end do
+  end if 
+
+
+
   ! find new pressures
   
   P(:,2) = (N_part(:)/Vol(:,2)) * Temp(:,2) 
@@ -568,6 +595,7 @@ SUBROUTINE solve_eqns
   dt = cfl_fac * 0.5 * minval( dr(:,2)/(cs(:) + abs(u(:,2))) )
   dt = min( dt , 0.5*minval(dr(:,2)**2.0/1e-10))
   dt = min( dt, init_dt )
+
 
 
   END SUBROUTINE solve_eqns 
@@ -711,7 +739,7 @@ SUBROUTINE comp_mat_coeffs_first (a,b,c)
     rho_minus = rho(i,2)
     
     dchidcomp_m = epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0
-    rhoDdr_m = rho2overnu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(i,1),logLambda)/rho(i,1)/dr(i,2)
+    rhoDdr_m = rho2overnu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(i,1),logLambda)*P(i,1)/rho(i,1)/dr(i,2)
 
   else 
     dr_minus = .5*(dr(i,2) + dr(i-1,2))
@@ -734,15 +762,11 @@ SUBROUTINE comp_mat_coeffs_first (a,b,c)
   dchidcomp_p = 2.0/(1.0/dchidcomp+1.0/dchidcomp_p)
   dchidcomp_m = 2.0/(1.0/dchidcomp+1.0/dchidcomp_m)
 
-
-
-
-
   dr_plus  = .5*(dr(i+1,2) + dr(i,2))
   rho_plus = .5*(rho(i+1,2) + rho(i,2))
   alpha    = dt
-  D        = (1.e-4)*2470.*(Temp_keV**(5./2))/      &        ! diffusion coefficent- eV corrected 130930
-             (sqrt(DD_mass)*(1.e-3)*rho(i,2)*(2.4*Comp(i,2)/mm_DD + 12.25*(1.-Comp(i,2))/mm_CH))  !  12.25 = 3.5**2
+  !D        = (1.e-4)*2470.*(Temp_keV**(5./2))/      &        ! diffusion coefficent- eV corrected 130930
+  !           (sqrt(DD_mass)*(1.e-3)*rho(i,2)*(2.4*Comp(i,2)/mm_DD + 12.25*(1.-Comp(i,2))/mm_CH))  !  12.25 = 3.5**2
   beta1    = 1/(rho(i,2)*r_bar_sq*dr(i,2))
 
   ! code for handling boundaries properly (shuld be implemented in other plasma routines)
@@ -892,15 +916,15 @@ REAL(qp) :: kappa, diff, epsm, Temp_eV, chi, coll_freq
 REAL(qp) :: Temp_Interface, Comp_Interface
 integer    :: ir
 
-	write (11,'(200e14.6)')   ( time*1.e9, i = 1,nr )  			    !  11 => 'time_xtOut' in ns
-	write (12,'(200e14.6)')     r(1:nr,1)!*1.e6            	            !  12 => 'radius_xtOut'  in  microns
-	write (13,'(200e14.6)')     rho(1:nr,1)          		            !  13 => 'density_xtOut'
-	write (14,'(200e14.6)')     P(1:nr,1)/rho(1:nr,1)/(gamma - 1.)             !  14 => 'ein_xtOut'
-	write (15,'(200e14.6)')     P(1:nr,1)                                      !  15 => 'pres_xtOut'
-	write (16,'(200e14.6)')     Temp(1:nr,1)/JeV_conv                          !  16 => 'tev_xtOut'
-  write (17,'(200e14.6)')     u(1:nr,1)         				    !  17 => 'velr_xtOut'
-  write (18,'(200e14.6)')     Comp(1:nr,1)         			    !  18 => 'comp_xtOut'
-  write (19,'(200e14.6)')     dr(1:nr,1)         			    !  19 => 'dr_xtOut'
+	write (11,'(200e14.5e3)')   ( time*1.e9, i = 1,nr )  			    !  11 => 'time_xtOut' in ns
+	write (12,'(200e14.5e3)')     r(1:nr,1)!*1.e6            	            !  12 => 'radius_xtOut'  in  microns
+	write (13,'(200e14.5e3)')     rho(1:nr,1)          		            !  13 => 'density_xtOut'
+	write (14,'(200e14.5e3)')     P(1:nr,1)/rho(1:nr,1)/(gamma - 1.)             !  14 => 'ein_xtOut'
+	write (15,'(200e14.5e3)')     P(1:nr,1)                                      !  15 => 'pres_xtOut'
+	write (16,'(200e14.5e3)')     Temp(1:nr,1)/JeV_conv                          !  16 => 'tev_xtOut'
+  write (17,'(200e14.5e3)')     u(1:nr,1)         				    !  17 => 'velr_xtOut'
+  write (18,'(200e14.5e3)')     Comp(1:nr,1)         			    !  18 => 'comp_xtOut'
+  write (19,'(200e14.5e3)')     dr(1:nr,1)         			    !  19 => 'dr_xtOut'
   
 !  do ir = 2, nr
 !    if ( r(ir,1) .lt. 500.e-6)&      
@@ -1113,10 +1137,6 @@ real (qp) function nuei_calc(z1,ni,tempe,logLambdae)
   return
 
 end
-
-
-
-
 subroutine compute_mass_fraction(dC)
 
   use prec_param
@@ -1131,11 +1151,11 @@ subroutine compute_mass_fraction(dC)
   real (qp) ::  nue1(nr+1), nue2(nr+1)
 
   real (qp) ::  oneoverrhorbarsqdr
-  real (qp) ::  rhoD_p, rhoD_m, rsq_p, rsq_m, dr_p, dr_m   				          !! General variables for the differencing
+  real (qp) ::  rhoDdr, rhoDdr_p, rhoDdr_m, rsq_p, rsq_m, dr_p, dr_m                    !! General variables for the differencing
 
-  real (qp) ::  dchidcomp_p, dchidcomp_m, dCompdr_p, dCompdr_m				      !! Molar Gradient
-  real (qp) ::  pions_p, pions_m, XmY_p, XmY_m, dPionsdr_p, dPionsdr_m     	!! Ion Pressure
-  real (qp) ::  ZmY_p, ZmY_m, dPelecsdr_p, dPelecsdr_m                      !! Electron Pressure
+  real (qp) ::  dchidcomp, dchidcomp_p, dchidcomp_m, dComp_p, dComp_m                  !! Molar Gradient
+  real (qp) ::  pions_p, pions_m, XmY_p, XmY_m, dPions_p, dPions_m      !! Ion Pressure
+  real (qp) ::  ZmY_p, ZmY_m, dPelecs_p, dPelecs_m                      !! Electron Pressure
 
   real (qp) ::  epsm = mm_CH/mm_DD  
 
@@ -1163,17 +1183,10 @@ subroutine compute_mass_fraction(dC)
 
   end do
 
-  !logLambda = 5.0 !log(8.799e29*(Temp(:,2)/(Comp(:,1)*z1+(1-Comp(:,1))*z2))**1.5/(ni+nj)**0.5)
-  !rho2overnu12(:) = 3.2137e18/(z1*z2)**2/logLambda(:)*(mm_CH*mm_DD*(mm_DD+mm_CH))**0.5*Temp(:,2)**1.5
-
-  !oneoverdr(:) = 1.0/dr(:,2)
-  !dchidcomp(:) = epsm/(epsm+Comp(:,1)-epsm*Comp(:,1))**2.0
-
-
   chi(:) = Comp(:,1)/(Comp(:,1)+(1.0-Comp(:,1))/epsm)
-  pelecs(:) = N_elec(:)/Vol(:,2)*Temp(:,2)
-  pions(:) = P(:,2)-pelecs(:)
-  Zi(:) = (N_av*M(:)*(Comp(:,1)/mm_DD)*ionized(:)*z1)/N_elec(:)!+eps_elecs
+  pelecs(:) = P(:,1)*N_elec(:)/N_part(:) !N_elec(:)/Vol(:,1)*Temp(:,1) !
+  pions(:) = P(:,1)*(1.0-N_elec(:)/N_part(:))
+  Zi(:) = (N_av*M(:)*(Comp(:,1)/mm_DD)*ionized(:)*z1)/(N_elec(:)+eps_elecs)
 
 
   do i = 1,nr
@@ -1186,134 +1199,97 @@ subroutine compute_mass_fraction(dC)
     !   print *, "tempr", tempr
     !  print *,'step'
     !end if
+    if (i .EQ. 1) then
+    
+      dchidcomp_m = epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0
+      rhoDdr_m = rho2overnu12(i)*P(i,1)/rho(i,1)/dr(i,2)
+      !rhoDdr_m = rho2overnu12(i)*pions(i)/rho(i,1)/dr(i,2)
 
-    if (i .eq. 1) then
-      rsq_m = r(i,2)*r(i,2)
-      rsq_p = r(i+1,2)*r(i+1,2)
+      dComp_m = Comp(i,1)-1.0
 
-      rhoD_p = 2.0/(1.0/(P(i+1,1)/rho(i+1,2)*rho2overnu12(i+1))+1.0/(P(i,1)/rho(i,2)*rho2overnu12(i)))
-      rhoD_m = rhoD_p
+      !rhoDoverP_m = 
+      pions_m = 2.0/(1.0/pions(i) + 1.0/pions(i))
+      XmY_m = 2.0/(1.0/(chi(i)-Comp(i,1))+1.0/(chi(i)-Comp(i,1)))
+      dPions_m = 0.0
+      
+      ZmY_m = 2.0/(1.0/(Zi(i)-Comp(i,1))+1.0/(Zi(i)-Comp(i,1)))
+      dPelecs_m = 0.0
 
-      !! Molar Gradient
-      !dchidcomp_p = 0.5*(epsm/(Comp(i+1,1)+epsm*(1.0-Comp(i+1,1)))**2.0+&
-      !              	epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0)
-      dchidcomp_p = 2.0/(1.0/(epsm/(Comp(i+1,1)+epsm*(1.0-Comp(i+1,1)))**2.0)+&
-                     1.0/(epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0))
+    else 
 
-      dchidcomp_m = dchidcomp_p
+      dchidcomp_m = epsm/(Comp(i-1,1)+epsm*(1.0-Comp(i-1,1)))**2.0
+      rhoDdr_m = rho2overnu12(i-1)*P(i-1,1)/rho(i-1,1)/dr(i-1,2)
+      !rhoDdr_m = rho2overnu12(i-1)*pions(i-1)/rho(i-1,1)/dr(i-1,2)
+      
+      dComp_m = Comp(i,1)-Comp(i-1,1)
 
-      dCompdr_m = 0.0
-      dCompdr_p = (Comp(i+1,1) - Comp(i,1))/(0.5*(dr(i+1,2)+dr(i,2)))
+      pions_m = 2.0/(1.0/pions(i-1) + 1.0/pions(i))
+      XmY_m = 2.0/(1.0/(chi(i-1)-Comp(i-1,1))+1.0/(chi(i)-Comp(i,1)))
+      dPions_m = (pions(i) - pions(i-1))
+
+      ZmY_m = 2.0/(1.0/(Zi(i-1)-Comp(i-1,1))+1.0/(Zi(i)-Comp(i,1)))
+      dPelecs_m = (pelecs(i) - pelecs(i-1))
+
+    end if
+
+    rsq_m = r(i,2)*r(i,2)
+    rsq_p = r(i+1,2)*r(i+1,2)
+
+    rhoDdr = rho2overnu12(i)*P(i,1)/rho(i,1)/dr(i,2)
+    !rhoDdr = rho2overnu12(i)*pions(i)/rho(i,1)/dr(i,2)
+    rhoDdr_p = rho2overnu12(i+1)*P(i+1,1)/rho(i+1,1)/dr(i+1,2)
+    !rhoDdr_p = rho2overnu12(i+1)*pions(i+1)/rho(i+1,1)/dr(i+1,2)
+
+    rhoDdr_p = 2.0/(1.0/rhoDdr_p+1.0/rhoDdr)
+    rhoDdr_m = 2.0/(1.0/rhoDdr_m+1.0/rhoDdr)
+  
+    dchidcomp = epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0
+    dchidcomp_p = epsm/(Comp(i+1,1)+epsm*(1.0-Comp(i+1,1)))**2.0
+    
+    dchidcomp_p = 2.0/(1.0/dchidcomp+1.0/dchidcomp_p)
+    dchidcomp_m = 2.0/(1.0/dchidcomp+1.0/dchidcomp_m)
+
+    !! Molar Gradient
+    
+    dComp_p = (Comp(i+1,1) - Comp(i,1))
 
       !! Ion Pressure Gradient
       pions_p = 2.0/(1.0/pions(i+1) + 1.0/pions(i))
-      pions_m = pions_p
-
       XmY_p = 2.0/(1.0/(chi(i+1)-Comp(i+1,1))+1.0/(chi(i)-Comp(i,1)))
-      XmY_m = XmY_p
-
-      dPionsdr_p = (pions(i+1) - pions(i))/(0.5*(dr(i+1,2)+dr(i,2)))
-      dPionsdr_m = 0.0
+      dPions_p = (pions(i+1) - pions(i))
+      
 
       !! Electron Pressure Gradient
       ZmY_p = 2.0/(1.0/(Zi(i+1)-Comp(i+1,1))+1.0/(Zi(i)-Comp(i,1)))
-      ZmY_m = ZmY_p
-
-      dPelecsdr_p = (pelecs(i+1) - pelecs(i))/(0.5*(dr(i+1,2)+dr(i,2)))
-      dPelecsdr_m = 0.0
+      dPelecs_p = (pelecs(i+1) - pelecs(i))
     
+
+    if (mod(it,1500).eq.0) then  
+    !print *, "Nelec", N_elec(i)
+    !print *, "Nions", N_part(i)-N_elec(i)  
+    !print *, "Npart", N_part(i)
+    !print *, "totalP", P(i,1)/1e11
+    !print *, "pions", pions(i)/1e11
+    !print *, "pelecs", pelecs(i)/1e11  
+    !print *, "pions_p", pions_p
+    !print *, "pions_m", pions_m
+    !print *, "ZmY_m", ZmY_m
+    !print *, "ZmY_p", ZmY_p
+    !print *, "dPelecsdr_m", ZmY_m*dPelecs_m
+    !print *, "dPelecsdr_p", ZmY_p*dPelecs_p
+    !print *, "dPionsdr_m", XmY_m*dPions_m
+    !print *, "dPionsdr_p", XmY_p*dPions_p
+    !print *, ' '
     
-    else if (i .eq. nr) then
-      
-      rsq_m = r(i,2)*r(i,2)
-      rsq_p = r(i+1,2)*r(i+1,2)
-
-      rhoD_m = 2.0/(1.0/(P(i-1,1)/rho(i-1,2)*rho2overnu12(i-1))+1.0/(P(i,1)/rho(i,2)*rho2overnu12(i)))
-      rhoD_p = rhoD_m 
-
-      !! Molar Gradient 
-      !dchidcomp_m = 0.5*(epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0+&
-      !	epsm/(Comp(i-1,1)+epsm*(1.0-Comp(i-1,1)))**2.0)
-
-      dchidcomp_m = 2.0/(1.0/(epsm/(Comp(i-1,1)+epsm*(1.0-Comp(i-1,1)))**2.0)+&
-                     1.0/(epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0))
-
-      dchidcomp_p = dchidcomp_m
-
-      dCompdr_p = 0.0
-      dCompdr_m = (Comp(i,1) - Comp(i-1,1))/(0.5*(dr(i,2)+dr(i-1,2)))
-      
-      !! Ion Pressure gradient
-      pions_m = 2.0/(1.0/pions(i-1) + 1.0/pions(i))
-      pions_p = pions_m
-
-      XmY_m = 2.0/(1.0/(chi(i-1)-Comp(i-1,1))+1.0/(chi(i)-Comp(i,1)))
-      XmY_p = XmY_m
-
-      dPionsdr_m = (pions(i) - pions(i-1))/(0.5*(dr(i,2)+dr(i-1,2)))
-      dPionsdr_p = 0.0           !! Check this boundary
-
-      !! Electron Pressure Gradient      
-      ZmY_m = 2.0/(1.0/(Zi(i-1)-Comp(i-1,1))+1.0/(Zi(i)-Comp(i,1)))
-      ZmY_p = ZmY_m
-      dPelecsdr_p = 0.0
-      dPelecsdr_m = (pelecs(i) - pelecs(i-1))/(0.5*(dr(i,2)+dr(i-1,2)))
-
-    else     
-      rsq_m = r(i,2)*r(i,2)
-      rsq_p = r(i+1,2)*r(i+1,2)
-
-      rhoD_p = 2.0/(1.0/(P(i+1,1)/rho(i+1,2)*rho2overnu12(i+1))+1.0/(P(i,1)/rho(i,2)*rho2overnu12(i)))
-      rhoD_m = 2.0/(1.0/(P(i-1,1)/rho(i-1,2)*rho2overnu12(i-1))+1.0/(P(i,1)/rho(i,2)*rho2overnu12(i)))
-
- 	    !! Molar Gradient Diffusion      
-      !dchidcomp_p = 0.5*(epsm/(Comp(i+1,1)+epsm*(1.0-Comp(i+1,1)))**2.0+&
-      !               epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0)
-
-      dchidcomp_p = 2.0/(1.0/(epsm/(Comp(i+1,1)+epsm*(1.0-Comp(i+1,1)))**2.0)+&
-                     1.0/(epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0))
-
-      !dchidcomp_m = 0.5*(epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0+&
-      !                epsm/(Comp(i-1,1)+epsm*(1.0-Comp(i-1,1)))**2.0)
-
-      dchidcomp_m = 2.0/(1.0/(epsm/(Comp(i-1,1)+epsm*(1.0-Comp(i-1,1)))**2.0)+&
-                     1.0/(epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0))
-
-      dCompdr_p = (Comp(i+1,1) - Comp(i,1))/(0.5*(dr(i+1,2)+dr(i,2)))
-      dCompdr_m = (Comp(i,1) - Comp(i-1,1))/(0.5*(dr(i,2)+dr(i-1,2)))
-
-    	!! Ion Pressure Gradient
-      pions_p = 2.0/(1.0/pions(i+1) + 1.0/pions(i))
-      pions_m = 2.0/(1.0/pions(i-1) + 1.0/pions(i))
-
-      XmY_p = 2.0/(1.0/(chi(i+1)-Comp(i+1,1))+1.0/(chi(i)-Comp(i,1)))
-      XmY_m = 2.0/(1.0/(chi(i-1)-Comp(i-1,1))+1.0/(chi(i)-Comp(i,1)))
-
-      dPionsdr_p = (pions(i+1) - pions(i))/(0.5*(dr(i+1,2)+dr(i,2)))
-      dPionsdr_m = (pions(i) - pions(i-1))/(0.5*(dr(i,2)+dr(i-1,2)))
-
-      !! Electron Pressure Gradient
-      ZmY_p = 2.0/(1.0/(Zi(i+1)-Comp(i+1,1))+1.0/(Zi(i)-Comp(i,1)))
-      ZmY_m = 2.0/(1.0/(Zi(i-1)-Comp(i-1,1))+1.0/(Zi(i)-Comp(i,1)))
-
-      dPelecsdr_p = (pelecs(i+1) - pelecs(i))/(0.5*(dr(i+1,2)+dr(i,2)))
-      dPelecsdr_m = (pelecs(i) - pelecs(i-1))/(0.5*(dr(i,2)+dr(i-1,2)))
-      
-  end if
-
-   !print *, "ZmY_p", ZmY_p
-   !print *, "ZmY_m", ZmY_m
-   !print *, "dPelecsdr_p", ZmY_p*dPelecsdr_p
-   !print *, "dPelecsdr_m", ZmY_m*dPelecsdr_m
-   !print *, "dPionsdr_p", XmY_p*dPionsdr_p
-   !print *, "dPionsdr_m", XmY_m*dPionsdr_m
-
-   dC(i) = oneoverrhorbarsqdr*(rhoD_p*rsq_p*&
-     !(dchidcomp_p*dCompdr_p-0*1.0/pions_p*(XmY_p*dPionsdr_p))-&
-     (dchidcomp_p*dCompdr_p-1.0/pions_p*(XmY_p*dPionsdr_p-ZmY_p*dPelecsdr_p))-&
-     rhoD_m*rsq_m*&
-     (dchidcomp_m*dCompdr_m-1.0/pions_m*(XmY_m*dPionsdr_m-ZmY_m*dPelecsdr_m))&
-     !(dchidcomp_m*dCompdr_m-0*1.0/pions_m*(XmY_m*dPionsdr_m))&
+    end if 
+   dC(i) = oneoverrhorbarsqdr*(rhoDdr_p*rsq_p*&
+     !(dchidcomp_p*dComp_p)-&
+     !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p))-&
+     (dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p))-&
+     rhoDdr_m*rsq_m*&
+     !(dchidcomp_m*dComp_m)&
+     !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m))&
+     (dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m))&     
      )
 
     !print *, 'dC', dC(i)
