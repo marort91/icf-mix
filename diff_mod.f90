@@ -1158,6 +1158,8 @@ subroutine compute_mass_fraction(dC)
   real (qp) ::  dchidcomp, dchidcomp_p, dchidcomp_m, dComp_p, dComp_m                  !! Molar Gradient
   real (qp) ::  pions_p, pions_m, XmY_p, XmY_m, dPions_p, dPions_m      !! Ion Pressure
   real (qp) ::  ZmY_p, ZmY_m, dPelecs_p, dPelecs_m                      !! Electron Pressure
+  real (qp) ::  gTiconst, gTiconst_p, gTiconst_m, gTeconst, gTeconst_p, gTeconst_m
+  real (qp) ::  dTe_p, dTe_m, dTi_p, dTi_m
 
   real (qp) ::  epsm = mm_CH/mm_DD  
 
@@ -1171,16 +1173,16 @@ subroutine compute_mass_fraction(dC)
     n1(ii) = ion_density_calc(Comp(ii,1),mm_DD,0)
     n2(ii) = ion_density_calc(Comp(ii,1),mm_CH,1)
     
-    logLambda(ii) = logLambda_calc(n1(ii)+n2(ii),Comp(ii,1)*z1+(1.0-Comp(ii,1))*z2,Temp(ii,1))
+    logLambda(ii) = logLambda_calc(n1(ii)+n2(ii),Comp(ii,1)*z1+(1.0-Comp(ii,1))*z2,Temp(ii,2))
     
-    rho2overnu12(ii) = rho2overnu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(ii,1),logLambda(ii))
+    rho2overnu12(ii) = rho2overnu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(ii,2),logLambda(ii))
     
-    nue2(:) = nuei_calc(z2,n2(ii),Temp(ii,1),logLambda(ii))
-    nue1(:) = nuei_calc(z1,n1(ii),Temp(ii,1),logLambda(ii))
+    nue2(:) = nuei_calc(z2,n2(ii),Temp(ii,2),logLambda(ii))
+    nue1(:) = nuei_calc(z1,n1(ii),Temp(ii,2),logLambda(ii))
 
-    nu11(:) = nu11_calc(m1,z1,z2,n1(ii),Temp(ii,1),logLambda(ii))
-    nu12(:) = nu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(ii,1),Temp(ii,1),Temp(ii,1),logLambda(ii),n2(ii))
-    nuee(:) = nuee_calc(N_elec(ii),Temp(ii,1),logLambda(ii))
+    nu11(:) = nu11_calc(m1,z1,z2,n1(ii),Temp(ii,2),logLambda(ii))
+    nu12(:) = nu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(ii,2),Temp(ii,2),Temp(ii,2),logLambda(ii),n2(ii))
+    nuee(:) = nuee_calc(N_elec(ii),Temp(ii,2),logLambda(ii))
 
 
   end do
@@ -1218,6 +1220,12 @@ subroutine compute_mass_fraction(dC)
       ZmY_m = 0.5*((Zi(i)-Comp(i,1))+(Zi(i)-Comp(i,1)))
       dPelecs_m = 0.0
 
+      gTiconst_m = -1.5*nu12(i)/(nu11(i)+nu12(i))*n1(i)
+      gTeconst_m = -1.5*(nue1(i)*(1.0-Zi(i))+(Zi(i)*nue2(i)))/(nuee(i)+nue1(i)+nue2(i))
+
+      dTe_m = 0.0
+      dTi_m = 0.0
+
     else 
 
       dchidcomp_m = epsm/(Comp(i-1,1)+epsm*(1.0-Comp(i-1,1)))**2.0
@@ -1234,6 +1242,12 @@ subroutine compute_mass_fraction(dC)
       ZmY_m = 0.5*((Zi(i-1)-Comp(i-1,1))+(Zi(i)-Comp(i,1)))
       dPelecs_m = (pelecs(i) - pelecs(i-1))
 
+
+      gTiconst_m = -1.5*nu12(i-1)/(nu11(i-1)+nu12(i-1))*n1(i-1)
+      gTeconst_m = -1.5*(nue1(i-1)*(1.0-Zi(i-1))+(Zi(i-1)*nue2(i-1)))/(nuee(i-1)+nue1(i-1)+nue2(i-1))
+
+      dTe_m = Temp(i,2)-Temp(i-1,2)
+      dTi_m = Temp(i,2)-Temp(i-1,2)
     end if
 
     rsq_m = r(i,2)*r(i,2)
@@ -1269,6 +1283,19 @@ subroutine compute_mass_fraction(dC)
       dPelecs_p = (pelecs(i+1) - pelecs(i))
     
 
+      gTiconst = -1.5*nu12(i)/(nu11(i)+nu12(i))*n1(i)
+      gTiconst_m = 0.5*(gTiconst+gTiconst_m)
+      gTiconst_p = -1.5*nu12(i+1)/(nu11(i+1)+nu12(i+1))*n1(i+1)
+      gTiconst_p = 0.5*(gTiconst_p+gTiconst)
+
+
+      gTeconst = -1.5*(nue1(i)*(1.0-Zi(i))+(Zi(i)*nue2(i)))/(nuee(i)+nue1(i)+nue2(i))
+      gTeconst_m = 0.5*(gTeconst+gTeconst_m)
+      gTeconst_p = -1.5*(nue1(i+1)*(1.0-Zi(i+1))+(Zi(i+1)*nue2(i+1)))/(nuee(i+1)+nue1(i+1)+nue2(i+1))
+      gTeconst_p = 0.5*(gTeconst_p+gTeconst)
+
+      dTe_p = Temp(i+1,2)-Temp(i,2)
+      dTi_p = Temp(i+1,2)-Temp(i,2)
     !if (mod(it,5147).eq.0) then ! .and. (mod(i,56)) then  
     !print *, "Nelec", i , N_elec(i)
     !print *, "Nions", N_part(i)-N_elec(i)  
@@ -1290,13 +1317,15 @@ subroutine compute_mass_fraction(dC)
     
     !end if 
    dC(i) = oneoverrhorbarsqdr*(rhoDdr_p*rsq_p*&
-     (dchidcomp_p*dComp_p)-&
+     !(dchidcomp_p*dComp_p)-&
      !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p))-&
      !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p))-&
-     rhoDdr_m*rsq_m*&
-     (dchidcomp_m*dComp_m)&
+     (dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p-gTeconst_p*dTe_p-gTiconst_p*dTi_p))&
+     -rhoDdr_m*rsq_m*&
+     !(dchidcomp_m*dComp_m)&
      !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m))&
-     !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m))&     
+     !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m))&
+     (dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m-gTeconst_m*dTe_m-gTiconst_m*dTi_m))&     
      )
 
     !if (mod(it,5147).eq.0) then  
