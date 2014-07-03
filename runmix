@@ -7,5 +7,7 @@ mkdir $dir
 cp diff_mod.f90 $dir
 cp input $dir
 cd $dir
-gfortran -fimplicit-none diff_mod.f90
+gfortran -Og -fimplicit-none -Wall -Wextra -fcheck=all diff_mod.f90
 ./a.out
+
+#-fbounds-check -fbacktrace

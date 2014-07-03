@@ -77,8 +77,8 @@ MODULE exp_params
   REAL(qp)          ::  highestPress, highestTemp, highestDensity, highEnergyTime, time_of_highestTemp
   REAL(qp)          ::  m1, m2, z1, z2
   CHARACTER(len=100)  ::  outfile, infile
-  CHARACTER(len=7)    ::  dir
-  CHARACTER(len=28)   ::  path = '/Users/archis/Documents/lanl/'
+  !CHARACTER(len=7)    ::  dir
+  !CHARACTER(len=28)   ::  path = '/Users/archis/Documents/lanl/'
 
 END MODULE exp_params
 
@@ -386,7 +386,7 @@ CHARACTER(len=100)  ::  output_file_name
   ionized(:)                       =  0.0
   ionized(in_forced:nr)            =  ion_frac
   N_elec(1:in_bound)               = (N_av/mm_DD) * M(1:in_bound)*z1    !   odd name - used as zbar  
-  N_elec((in_bound+1):nr)          = (N_av/mm_CH) * M((in_bound+1):(nr+1))*z2    !     but zbar by material not by zone - need to revise
+  N_elec((in_bound+1):nr+1)        = (N_av/mm_CH) * M((in_bound+1):(nr+1))*z2    !     but zbar by material not by zone - need to revise
   N_elec(:)                        =  N_elec(:)*ionized(:)!+eps_elecs
   N_part(in_forced:nr)             =  (1+ionized(in_forced:nr)*z2) *        &
                                       N_part(in_forced:nr)       !   add electrons to particle pressure 
@@ -462,7 +462,7 @@ SUBROUTINE solve_eqns
   call visc_mat_coeffs(subdiag,diag,supdiag)
   end do 
   
-  vel_RHS(:) = u(:,1) - dt*vel_fac(:)
+  vel_RHS(1:nr+1) = u(1:nr+1,1) - dt*vel_fac(:)
 
   u(:,2) = vel_RHS(:)  !!   test u w/o tridag
   
@@ -506,7 +506,7 @@ SUBROUTINE solve_eqns
     temp_RHS(i) =  temp_RHS(i) +  dt* (gamma-1)* (Vol(i,2)/ N_part(i))* forcing(i)
     end do
     
-    Temp(1:nr,2) = temp_RHS(:)   !  explicit temp from RMs tempRHS
+    Temp(1:nr,2) = temp_RHS(1:nr)   !  explicit temp from RMs tempRHS
 
     
     call tri_diag(subdiag,diag,supdiag,temp_RHS(1:nr),Temp(1:nr,2),nr)  
@@ -524,10 +524,20 @@ SUBROUTINE solve_eqns
     Comp((nr+1),2) = 0  
   
   else if (diff_sw .eq. 2) then
-  
+    if (mod(it,1473).eq.0) then  
+      do i=1,nr+1
+        print *,'Comp    = ', i, Comp(i,2)
+        print *,'ionized = ',ionized(i)
+        print *,'Nelec   = ',N_elec(i)
+        print *,'NT      = ', N_part(i)
+        print *,'skip'
+      !print *,'oC =' , N_av*M(i)*(  Comp(i,2)/ mm_DD* ( 1.+ionized(i)*z1 ) + (1.-Comp(i,2))/ mm_CH* ( 1.+ionized(i)*z2 )  )
+      end do
+    end if 
     call compute_mass_fraction(dC)
+    dC(nr+1) = 0.0
     Comp(:,2) = Comp(:,1) + dt*dC(:)
-    Comp((nr+1),2) = 0  
+    Comp((nr+1),2) = 0.0  
   
   else 
     Comp(:,2) = Comp(:,1)
@@ -574,14 +584,7 @@ SUBROUTINE solve_eqns
   N_elec(:) = (z1*Comp(:,2)/mm_DD + z2*(1-Comp(:,2))/mm_CH)*ionized(:)*M(:)*N_av!+eps_elecs    !  ne - needed in mixing!
   N_part(:) = N_av*M(:)*(Comp(:,2)/mm_DD*(1.+ionized(:)*z1)+(1.-Comp(:,2))/mm_CH*(1.+ionized(:)*z2))    !   z1 = 1 and z2 = z2 hardwired in
 
- !    if (mod(it,5147).eq.0) then  
- !    do i=1,nr
-!      print *,'Comp = ',Comp(i,2)
-      !print *,'Nelec = ',N_elec(i)
-      !print *,'NT = ', N_part(i)
-      !print *,'oC =' , N_av*M(i)*(  Comp(i,2)/ mm_DD* ( 1.+ionized(i)*z1 ) + (1.-Comp(i,2))/ mm_CH* ( 1.+ionized(i)*z2 )  )
-  !  end do
- ! end if 
+
 
 
 
@@ -594,7 +597,7 @@ SUBROUTINE solve_eqns
   cs(:) = sqrt( gamma * P(:,2) / rho(:,2) )
   
   ! calculate new time step
-  dt = cfl_fac * 0.5 * minval( dr(:,2)/(cs(:) + abs(u(:,2))) )
+  dt = cfl_fac * 0.5 * minval( dr(:,2)/(cs(:) + abs(u(1:nr+1,2))) )
   dt = min( dt , 0.5*minval(dr(:,2)**2.0/1e-10))
   dt = min( dt, init_dt )
 
@@ -663,9 +666,8 @@ SUBROUTINE temp_mat_coeffs (a,b,c)
 
   REAL(qp), DIMENSION(nr+1), INTENT(out)  ::  a,b,c
   REAL(qp)             ::  dr_minus, dr_plus, alpha, beta1
-  REAL(qp)             ::  kappa, Temp_eV_minus, Temp_eV, Temp_eV_plus, logLambda
-  REAL(qp), PARAMETER  ::  kb_ergeV = 1.6e-12, ErgJ_conv = 1e-7, ccM_conv = 1e-6, gKg_conv = 1e-3, m_elec = 9.10938e-28
-
+  REAL(qp)             ::  kappa,  Temp_eV,  logLambda !Temp_eV_minus,Temp_eV_plus,
+  !REAL(qp), PARAMETER  ::   ErgJ_conv = 1e-7, ccM_conv = 1e-6,gKg_conv = 1e-3,kb_ergeV = 1.6e-12,m_elec = 9.10938e-28
     
 
   !logLambda = log(8.799e29*(Temp(i,2)/(Comp(i,1)*z1+(1-Comp(i,1))*z2))**1.5/(ni+nj)**0.5)
@@ -724,7 +726,7 @@ SUBROUTINE comp_mat_coeffs_first (a,b,c)
 
   REAL(qp), DIMENSION(nr+1), INTENT(out)  ::  a,b,c
   REAL(qp)                                ::  dr_minus, dr_plus, alpha, beta1, Temp_keV
-  REAL(qp)                                ::  D, rho_plus, rho_minus, DD_mass, CH_mass
+  REAL(qp)                                ::  rho_plus, rho_minus, DD_mass, CH_mass!, D
 
   real(qp) :: dchidcomp, dchidcomp_p, dchidcomp_m, rhoDdr, rhoDdr_p, rhoDdr_m, rho2overnu12_calc
   real(qp) :: epsm = mm_DD/mm_CH
@@ -790,89 +792,7 @@ SUBROUTINE comp_mat_coeffs_first (a,b,c)
 END SUBROUTINE comp_mat_coeffs_first
 
 
-SUBROUTINE comp_mat_coeffs (a,b,c)
-
-  use prec_param
-  use exp_params
-  use phys_const
-  use data_arrays
-
-  REAL(qp), DIMENSION(nr+1), INTENT(out)  ::  a,b,c
-  REAL(qp) ::  dr_minus, dr_plus, alpha, beta1, Temp_keV
-  REAL(qp) ::  D, rho_plus, rho_minus, DD_mass, CH_mass
-  REAL(qp) ::  D_p, D_m, D_mean, epsm, dchidcomp_p, dchidcomp_m, dchidcomp, dchidcomp_mean
-
-  Temp_keV = Temp(i,2)/(1000.*JeV_conv)  ! convert temperature to keV
-  DD_mass = mm_DD/(1 + ionized(i))       ! calculating mass per particle
-  CH_mass = mm_CH/(1 + ionized(i))       ! calculating mass per particle
-  epsm = mm_CH/mm_DD
-
-  if (i .EQ. 1) then
-    dr_minus = dr(i,2)
-    rho_minus = rho(i,2)
-  else 
-    dr_minus = .5*(dr(i,2) + dr(i-1,2))
-    rho_minus = .5*(rho(i,2) + rho(i-1,2))
-  end if
-
-
-  dr_plus  = .5*(dr(i+1,2) + dr(i,2))
-  rho_plus = .5*(rho(i+1,2) + rho(i,2))
-  alpha    = dt
-
-  D        = (1.e-4)*2470.*(Temp_keV**(5./2))/      &        ! diffusion coefficent- eV corrected 130930
-             (sqrt(DD_mass)*(1.e-3)*rho(i,2)*(2.4*Comp(i,2)/mm_DD + 12.25*(1.-Comp(i,2))/mm_CH)) 
-  dchidcomp = epsm/(Comp(i,1)+epsm*(1.0-Comp(i,1)))**2.0
- 
-  beta1    = 1/(rho(i,2)*r_bar_sq*dr(i,2))
-
-  ! code for handling boundaries properly (shuld be implemented in other plasma routines)
-  if (i .EQ. 1) then
-    a(i) = 0
-    
-  else
-    D_m = (1.e-4)*2470.*(Temp_keV**(5./2))/      &        ! diffusion coefficent- eV corrected 130930
-             (sqrt(DD_mass)*(1.e-3)*rho(i-1,2)*(2.4*Comp(i-1,2)/mm_DD + 12.25*(1.-Comp(i-1,2))/mm_CH))
-    
-    !D_mean = 0.5*(D_m + D)
-    D_mean = 2.0/(1.0/D_m+1.0/D)
-
-    
-    dchidcomp_m = epsm/(Comp(i-1,1)+epsm*(1.0-Comp(i-1,1)))**2.0    
-    
-    !dchidcomp_mean = 0.5*(dchidcomp_m + dchidcomp)
-    dchidcomp_mean = 2.0/(1.0/dchidcomp_m+1.0/dchidcomp)
-
-    !a(i)   = -alpha*beta1*r_sq(i)*rho_minus*D/dr_minus 
-    a(i)   = -alpha*beta1*r_sq(i)*rho_minus*D_mean/dr_minus*dchidcomp_mean
-  end if
-
-
-  if (i .EQ. nr) then
-    c(i) = 0
-    
-  else
-    D_p        = (1.e-4)*2470.*(Temp_keV**(5./2))/&                    ! diffusion coefficent- eV corrected 130930
-                  (sqrt(DD_mass)*(1.e-3)*rho(i+1,2)*(2.4*Comp(i+1,2)/mm_DD + 12.25*(1.-Comp(i+1,2))/mm_CH))
-    !D_mean = 0.5*(D_p + D)
-    D_mean = 2.0/(1.0/D_p+1.0/D)
-
-
-    dchidcomp_p = epsm/(Comp(i+1,1)+epsm*(1.0-Comp(i+1,1)))**2.0
-    !dchidcomp_mean = 0.5*(dchidcomp_p + dchidcomp)
-    dchidcomp_mean = 2.0/(1.0/dchidcomp_p+1.0/dchidcomp)              
-
-    !c(i) = -alpha*beta1*r_sq(i+1)*rho_plus*D/dr_plus
-    c(i) = -alpha*beta1*r_sq(i+1)*rho_plus*D_mean/dr_plus*dchidcomp_mean
-  end if
-
-
-
-  b(i)   = 1. - (a(i) + c(i))
-
-END SUBROUTINE comp_mat_coeffs
-
-  SUBROUTINE tri_diag (a,b,c,d,u,n)
+SUBROUTINE tri_diag (a,b,c,d,u,n)
 
   use prec_param
 
@@ -882,7 +802,7 @@ END SUBROUTINE comp_mat_coeffs
   REAL(qp), DIMENSION(n), INTENT(out)  ::  u
   REAL(qp)                             ::  bet, gam(n)
 
-  if (b(1) .EQ. 0) then
+  if (b(1) .EQ. 0.0) then
   print *, 'tridiag failed w/ b(1) = 0'
   read(*,*)
   end if
@@ -893,7 +813,7 @@ END SUBROUTINE comp_mat_coeffs
   do j = 2,n
   gam(j) = c(j-1)/bet
   bet = b(j) - a(j)*gam(j)
-  if (bet .EQ. 0) then
+  if (bet .EQ. 0.0) then
   print *, 'tridiag failed w/ bet=0'
   read(*,*)
   end if
@@ -904,7 +824,7 @@ END SUBROUTINE comp_mat_coeffs
   u(j) = u(j) - gam(j+1)*u(j+1)
   end do
 
-  END SUBROUTINE tri_diag
+END SUBROUTINE tri_diag
 
 SUBROUTINE write_data_pyout1     !     python output, eV, Sept, 2013
 
@@ -913,20 +833,20 @@ use phys_const
 use data_arrays
 
 !  REAL(qp), ALLOCATABLE  ::  dTdr(:)
-REAL(qp) :: dTdr(nr-2,1), dCdr(nr-2,1)
-REAL(qp) :: kappa, diff, epsm, Temp_eV, chi, coll_freq
-REAL(qp) :: Temp_Interface, Comp_Interface
-integer    :: ir
+!REAL(qp) :: dTdr(nr-2,1), dCdr(nr-2,1)
+!REAL(qp) :: kappa, diff, epsm, Temp_eV, chi, coll_freq
+!REAL(qp) :: Temp_Interface, Comp_Interface
+!integer    :: ir
 
-	write (11,'(200e14.5e3)')   ( time*1.e9, i = 1,nr )  			    !  11 => 'time_xtOut' in ns
-	write (12,'(200e14.5e3)')     r(1:nr,1)!*1.e6            	            !  12 => 'radius_xtOut'  in  microns
-	write (13,'(200e14.5e3)')     rho(1:nr,1)          		            !  13 => 'density_xtOut'
-	write (14,'(200e14.5e3)')     P(1:nr,1)/rho(1:nr,1)/(gamma - 1.)             !  14 => 'ein_xtOut'
-	write (15,'(200e14.5e3)')     P(1:nr,1)                                      !  15 => 'pres_xtOut'
-	write (16,'(200e14.5e3)')     Temp(1:nr,1)/JeV_conv                          !  16 => 'tev_xtOut'
-  write (17,'(200e14.5e3)')     u(1:nr,1)         				    !  17 => 'velr_xtOut'
-  write (18,'(200e14.5e3)')     Comp(1:nr,1)         			    !  18 => 'comp_xtOut'
-  write (19,'(200e14.5e3)')     dr(1:nr,1)         			    !  19 => 'dr_xtOut'
+write (11,'(200e14.5e3)')   ( time*1.e9, i = 1,nr )                   !  11 => 'time_xtOut' in ns
+write (12,'(200e14.5e3)')     r(1:nr,1)!*1.e-6                        !  12 => 'radius_xtOut'  in  microns
+write (13,'(200e14.5e3)')     rho(1:nr,1)                             !  13 => 'density_xtOut'
+write (14,'(200e14.5e3)')     P(1:nr,1)/rho(1:nr,1)/(gamma - 1.)      !  14 => 'ein_xtOut'
+write (15,'(200e14.5e3)')     P(1:nr,1)                               !  15 => 'pres_xtOut'
+write (16,'(200e14.5e3)')     Temp(1:nr,1)/JeV_conv                   !  16 => 'tev_xtOut'
+write (17,'(200e14.5e3)')     u(1:nr,1)                               !  17 => 'velr_xtOut'
+write (18,'(200e14.5e3)')     Comp(1:nr,1)                            !  18 => 'comp_xtOut'
+write (19,'(200e14.5e3)')     dr(1:nr,1)                              !  19 => 'dr_xtOut'
   
 !  do ir = 2, nr
 !    if ( r(ir,1) .lt. 500.e-6)&      
@@ -988,6 +908,7 @@ use phys_const
   deallocate( u        )
   deallocate( rho      )
   deallocate( Temp     )
+  deallocate( TempIC   )
   deallocate( P        )
   deallocate( Comp     )
   deallocate( dr       )
@@ -1029,7 +950,7 @@ real (qp) function logLambda_calc(totaln,zbar,tempe)
   use phys_const
 
   implicit none
-  real (qp) :: totaln, zbar, massfrac, tempe
+  real (qp) :: totaln, zbar, tempe
   !  real (qp) :: zbar
 
   ! zbar = massfrac*z1+(1.0-massfrac)*z2
@@ -1059,8 +980,6 @@ real (qp) function rho2overnu12_calc(m1,m2,Zcharge1,Zcharge2,temp1,logLambda)
   rho2overnu12_calc = rho2overnu12_calc*(m2/(m1+m2))**0.5
   rho2overnu12_calc = m2/rho2overnu12_calc
 
-
-
   return
 
 end
@@ -1083,14 +1002,14 @@ real (qp) function nu11_calc(m1,z1,z2,n1,temp1,logLambdai)
 
 end
 
-real (qp) function nu12_calc(m1,m2,z1,z2,temp1,temp2,tempe,logLambdai,n2)
+real (qp) function nu12_calc(m1,m2,z1,z2,temp1,logLambdai,n2)
   
   use prec_param
   use phys_const
   !use exp_params
   
   implicit none 
-  real (qp) :: m1, m2, z1, z2, temp1, temp2, tempe, logLambdai, n2
+  real (qp) :: m1, m2, z1, z2, temp1, logLambdai, n2
   real (qp) :: pi = 2.0 * acos(0.0)
 
   nu12_calc = (2.0/pi)**0.5*(4.0*pi/3.0)
@@ -1139,6 +1058,7 @@ real (qp) function nuei_calc(z1,ni,tempe,logLambdae)
   return
 
 end
+
 subroutine compute_mass_fraction(dC)
 
   use prec_param
@@ -1153,7 +1073,7 @@ subroutine compute_mass_fraction(dC)
   real (qp) ::  nue1(nr+1), nue2(nr+1)
 
   real (qp) ::  oneoverrhorbarsqdr
-  real (qp) ::  rhoDdr, rhoDdr_p, rhoDdr_m, rsq_p, rsq_m, dr_p, dr_m                    !! General variables for the differencing
+  real (qp) ::  rhoDdr, rhoDdr_p, rhoDdr_m, rsq_p, rsq_m                     !! General variables for the differencing
 
   real (qp) ::  dchidcomp, dchidcomp_p, dchidcomp_m, dComp_p, dComp_m                  !! Molar Gradient
   real (qp) ::  pions_p, pions_m, XmY_p, XmY_m, dPions_p, dPions_m      !! Ion Pressure
@@ -1165,11 +1085,11 @@ subroutine compute_mass_fraction(dC)
 
   real (qp) ::  ion_density_calc, logLambda_calc
   real (qp) ::  n1(nr+1), n2(nr+1), rho2overnu12(nr+1), logLambda(nr+1)
-  real (qp) ::  tempr, rho2overnu12_calc, nuei_calc, nu11_calc, nu12_calc, nuee_calc
+  real (qp) ::  rho2overnu12_calc, nuei_calc, nu11_calc, nu12_calc, nuee_calc
 
   integer ii
 
-  do ii = 1,nr
+  do ii = 1,nr+1
     n1(ii) = ion_density_calc(Comp(ii,1),mm_DD,0)
     n2(ii) = ion_density_calc(Comp(ii,1),mm_CH,1)
     
@@ -1181,7 +1101,7 @@ subroutine compute_mass_fraction(dC)
     nue1(:) = nuei_calc(z1,n1(ii),Temp(ii,2),logLambda(ii))
 
     nu11(:) = nu11_calc(m1,z1,z2,n1(ii),Temp(ii,2),logLambda(ii))
-    nu12(:) = nu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(ii,2),Temp(ii,2),Temp(ii,2),logLambda(ii),n2(ii))
+    nu12(:) = nu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(ii,2),logLambda(ii),n2(ii))
     nuee(:) = nuee_calc(N_elec(ii),Temp(ii,2),logLambda(ii))
 
 
@@ -1190,12 +1110,16 @@ subroutine compute_mass_fraction(dC)
   chi(:) = Comp(:,1)/(Comp(:,1)+(1.0-Comp(:,1))/epsm)
   pelecs(:) = P(:,1)*N_elec(:)/N_part(:) !N_elec(:)/Vol(:,1)*Temp(:,1) !
   pions(:) = P(:,1)*(1.0-N_elec(:)/N_part(:))
-  Zi(:) = (N_av*M(:)*(Comp(:,1)/mm_DD)*ionized(:)*z1)/(N_elec(:)+eps_elecs*1e-6)
+  Zi(:) = (N_av*M(:)*(Comp(:,1)/mm_DD)*ionized(:)*z1)/(N_elec(:)+eps_elecs)
 
 
   do i = 1,nr
 
     oneoverrhorbarsqdr = 1.0/rho(i,2)/(0.5*(r(i+1,2)+r(i,2)))**2.0/dr(i,2)
+    
+    if (Zi(i) .gt. 1.0) then
+      Zi(i) = 0.0
+    end if
     !tempr = rho2overnu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(i,1),Temp(i,1),Temp(i,1),logLambda(i))
 
     !if (mod(it,1000).eq.0) then  
@@ -1209,7 +1133,7 @@ subroutine compute_mass_fraction(dC)
       rhoDdr_m = rho2overnu12(i)*P(i,1)/rho(i,1)/dr(i,2)
       !rhoDdr_m = rho2overnu12(i)*pions(i)/rho(i,1)/dr(i,2)
 
-      dComp_m = Comp(i,1)-1.0
+      dComp_m = 0.0 !Comp(i,1)-1.0
 
       !rhoDoverP_m = 
       pions_m = 2.0/(1.0/pions(i) + 1.0/pions(i))
@@ -1285,50 +1209,63 @@ subroutine compute_mass_fraction(dC)
 
       gTiconst = -1.5*nu12(i)/(nu11(i)+nu12(i))*n1(i)
       gTiconst_m = 0.5*(gTiconst+gTiconst_m)
+
       gTiconst_p = -1.5*nu12(i+1)/(nu11(i+1)+nu12(i+1))*n1(i+1)
       gTiconst_p = 0.5*(gTiconst_p+gTiconst)
 
 
       gTeconst = -1.5*(nue1(i)*(1.0-Zi(i))+(Zi(i)*nue2(i)))/(nuee(i)+nue1(i)+nue2(i))
       gTeconst_m = 0.5*(gTeconst+gTeconst_m)
+
       gTeconst_p = -1.5*(nue1(i+1)*(1.0-Zi(i+1))+(Zi(i+1)*nue2(i+1)))/(nuee(i+1)+nue1(i+1)+nue2(i+1))
       gTeconst_p = 0.5*(gTeconst_p+gTeconst)
 
       dTe_p = Temp(i+1,2)-Temp(i,2)
       dTi_p = Temp(i+1,2)-Temp(i,2)
-    !if (mod(it,5147).eq.0) then ! .and. (mod(i,56)) then  
-    !print *, "Nelec", i , N_elec(i)
+    
+
+    !if (mod(it,1472).eq.0) then ! .and. (mod(i,56)) then  
+    !print *, "Nelec      =", i , N_elec(i)
     !print *, "Nions", N_part(i)-N_elec(i)  
-    !print *, "Npart", N_part(i)
+    !print *, "Npart      =", N_part(i)
     !print *, "totalP", P(i,1)/1e11
     !print *, "pions", pions(i)/1e11
     !print *, "pelecs", pelecs(i)/1e11  
     !print *, "pions_p", i, pions_p
     !print *, "pions_m", pions_m
-    !print *, "Z", i , Zi(i)
+    !print *, "Z", Zi(i)
+    !print *, "Comp", i, Comp(i,1)
     !print *, "ZmY_m", ZmY_m
     !print *, "ZmY_p", ZmY_p
-    !print *, "dPelecsdr_m", dPelecs_m
-    !print *, "dPelecsdr_p", dPelecs_p
+    !print *, "dPelecsdr_m", ZmY_m*dPelecs_m
+    !print *, "dPelecsdr_p", ZmY_p*dPelecs_p
+    !print *, "XmY_m", XmY_m
+    !print *, "XmY_p", XmY_p
     !print *, "dPionsdr_m", dPions_m
     !print *, "dPionsdr_p", dPions_p
+    !print *, "gTeconst_p =", gTeconst_p
+    !print *, "gTeconst_m =", gTeconst_m
+    !print *, "skip"
+
     
     !print *, ' '
     
     !end if 
+
+
    dC(i) = oneoverrhorbarsqdr*(rhoDdr_p*rsq_p*&
-     !(dchidcomp_p*dComp_p)-&
-     !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p))-&
-     !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p))-&
-     (dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p-gTeconst_p*dTe_p-gTiconst_p*dTi_p))&
+     (dchidcomp_p*dComp_p)&
+     !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p))&
+     !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p))&
+     !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p+gTeconst_p*dTe_p+gTiconst_p*dTi_p))&
      -rhoDdr_m*rsq_m*&
-     !(dchidcomp_m*dComp_m)&
+     (dchidcomp_m*dComp_m)&
      !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m))&
      !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m))&
-     (dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m-gTeconst_m*dTe_m-gTiconst_m*dTi_m))&     
+     !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m+gTeconst_m*dTe_m+gTiconst_m*dTi_m))&     
      )
 
-    !if (mod(it,5147).eq.0) then  
+    !if (mod(it,8).eq.0) then  
     !print *, 'i dC',i, dC(i)
     !end if
     !print *,'oneoverrhorbarsqdr,dComp,rho2overnu12 = ',oneoverrhorbarsqdr(i),dComp(i),rho2overnu12(i)
