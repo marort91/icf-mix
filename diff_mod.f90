@@ -520,17 +520,18 @@ SUBROUTINE solve_eqns
       call comp_mat_coeffs_first(subdiag,diag,supdiag)  
     end do
   
-    !call tri_diag(subdiag,diag,supdiag,Comp(1:nr,1),Comp(1:nr,2),nr)
+    call tri_diag(subdiag,diag,supdiag,Comp(1:nr,1),Comp(1:nr,2),nr)
+    Comp((nr+1),2) = 0  
   
-    !do i = 1, nr
-    !  if ( Comp(i,2) .lt. eps ) Comp(i,2) = 0.   !   python plotter doesn't like comp => 1.e-102
-    !enddo
+  else if (diff_sw .eq. 2) then
+  
+    call compute_mass_fraction(dC)
+    Comp(:,2) = Comp(:,1) + dt*dC(:)
+    Comp((nr+1),2) = 0  
   
   else 
     Comp(:,2) = Comp(:,1)
   end if
-  
-  call compute_mass_fraction(dC)
 
  ! if (mod(it,5).eq.0) then
     !do i=1,nr
@@ -542,7 +543,7 @@ SUBROUTINE solve_eqns
   !  print *,'step'
  !end if
 
-  Comp(:,2) = Comp(:,1) + dt*dC(:)
+  
 
   !if (mod(it,5).eq.0) then
   !  do i=1,nr
@@ -551,7 +552,7 @@ SUBROUTINE solve_eqns
   !  end do
   !end if
 
-  Comp((nr+1),2) = 0
+
 
   ! determine if zone is ionized based on temperature change and change N_part due to new Comp
   do i = 1,nr
@@ -560,26 +561,27 @@ SUBROUTINE solve_eqns
     end if
   end do
 
-      if (mod(it,5147).eq.0) then  
-     do i=1,nr
-      print *,'Comp = ',Comp(i,2)
+ !     if (mod(it,5147).eq.0) then  
+ !    do i=1,nr
+ !     print *,'Comp A = ',Comp(i,1)
+ !     print *,'Comp B = ',Comp(i,2)
       !print *,'Nelec = ',N_elec(i)
       !print *,'NT = ',N_elec(i)+N_part(i)
       !print *,'oC =' , N_av*M(i)*(  Comp(i,2)/ mm_DD* ( 1.+ionized(i)*z1 ) + (1.-Comp(i,2))/ mm_CH* ( 1.+ionized(i)*z2 )  )
-    end do
-  end if 
+   ! end do
+  !end if 
 
   N_elec(:) = (z1*Comp(:,2)/mm_DD + z2*(1-Comp(:,2))/mm_CH)*ionized(:)*M(:)*N_av!+eps_elecs    !  ne - needed in mixing!
   N_part(:) = N_av*M(:)*(Comp(:,2)/mm_DD*(1.+ionized(:)*z1)+(1.-Comp(:,2))/mm_CH*(1.+ionized(:)*z2))    !   z1 = 1 and z2 = z2 hardwired in
 
-     if (mod(it,5147).eq.0) then  
-     do i=1,nr
-      !print *,'Comp = ',Comp(i,2)
-      print *,'Nelec = ',N_elec(i)
-      print *,'NT = ', N_part(i)
+ !    if (mod(it,5147).eq.0) then  
+ !    do i=1,nr
+!      print *,'Comp = ',Comp(i,2)
+      !print *,'Nelec = ',N_elec(i)
+      !print *,'NT = ', N_part(i)
       !print *,'oC =' , N_av*M(i)*(  Comp(i,2)/ mm_DD* ( 1.+ionized(i)*z1 ) + (1.-Comp(i,2))/ mm_CH* ( 1.+ionized(i)*z2 )  )
-    end do
-  end if 
+  !  end do
+ ! end if 
 
 
 
@@ -1186,7 +1188,7 @@ subroutine compute_mass_fraction(dC)
   chi(:) = Comp(:,1)/(Comp(:,1)+(1.0-Comp(:,1))/epsm)
   pelecs(:) = P(:,1)*N_elec(:)/N_part(:) !N_elec(:)/Vol(:,1)*Temp(:,1) !
   pions(:) = P(:,1)*(1.0-N_elec(:)/N_part(:))
-  Zi(:) = (N_av*M(:)*(Comp(:,1)/mm_DD)*ionized(:)*z1)/(N_elec(:)+eps_elecs)
+  Zi(:) = (N_av*M(:)*(Comp(:,1)/mm_DD)*ionized(:)*z1)/(N_elec(:)+eps_elecs*1e-6)
 
 
   do i = 1,nr
@@ -1212,7 +1214,8 @@ subroutine compute_mass_fraction(dC)
       XmY_m = 2.0/(1.0/(chi(i)-Comp(i,1))+1.0/(chi(i)-Comp(i,1)))
       dPions_m = 0.0
       
-      ZmY_m = 2.0/(1.0/(Zi(i)-Comp(i,1))+1.0/(Zi(i)-Comp(i,1)))
+    !  ZmY_m = 2.0/(1.0/(Zi(i)-Comp(i,1))+1.0/(Zi(i)-Comp(i,1)))
+      ZmY_m = 0.5*((Zi(i)-Comp(i,1))+(Zi(i)-Comp(i,1)))
       dPelecs_m = 0.0
 
     else 
@@ -1227,7 +1230,8 @@ subroutine compute_mass_fraction(dC)
       XmY_m = 2.0/(1.0/(chi(i-1)-Comp(i-1,1))+1.0/(chi(i)-Comp(i,1)))
       dPions_m = (pions(i) - pions(i-1))
 
-      ZmY_m = 2.0/(1.0/(Zi(i-1)-Comp(i-1,1))+1.0/(Zi(i)-Comp(i,1)))
+    !  ZmY_m = 2.0/(1.0/(Zi(i-1)-Comp(i-1,1))+1.0/(Zi(i)-Comp(i,1)))
+      ZmY_m = 0.5*((Zi(i-1)-Comp(i-1,1))+(Zi(i)-Comp(i,1)))
       dPelecs_m = (pelecs(i) - pelecs(i-1))
 
     end if
@@ -1260,39 +1264,44 @@ subroutine compute_mass_fraction(dC)
       
 
       !! Electron Pressure Gradient
-      ZmY_p = 2.0/(1.0/(Zi(i+1)-Comp(i+1,1))+1.0/(Zi(i)-Comp(i,1)))
+    !  ZmY_p = 2.0/(1.0/(Zi(i+1)-Comp(i+1,1))+1.0/(Zi(i)-Comp(i,1)))
+      ZmY_p = 0.5*((Zi(i+1)-Comp(i+1,1))+(Zi(i)-Comp(i,1)))
       dPelecs_p = (pelecs(i+1) - pelecs(i))
     
 
-    if (mod(it,1500).eq.0) then  
-    !print *, "Nelec", N_elec(i)
+    !if (mod(it,5147).eq.0) then ! .and. (mod(i,56)) then  
+    !print *, "Nelec", i , N_elec(i)
     !print *, "Nions", N_part(i)-N_elec(i)  
     !print *, "Npart", N_part(i)
     !print *, "totalP", P(i,1)/1e11
     !print *, "pions", pions(i)/1e11
     !print *, "pelecs", pelecs(i)/1e11  
-    !print *, "pions_p", pions_p
+    !print *, "pions_p", i, pions_p
     !print *, "pions_m", pions_m
+    !print *, "Z", i , Zi(i)
     !print *, "ZmY_m", ZmY_m
     !print *, "ZmY_p", ZmY_p
-    !print *, "dPelecsdr_m", ZmY_m*dPelecs_m
-    !print *, "dPelecsdr_p", ZmY_p*dPelecs_p
-    !print *, "dPionsdr_m", XmY_m*dPions_m
-    !print *, "dPionsdr_p", XmY_p*dPions_p
+    !print *, "dPelecsdr_m", dPelecs_m
+    !print *, "dPelecsdr_p", dPelecs_p
+    !print *, "dPionsdr_m", dPions_m
+    !print *, "dPionsdr_p", dPions_p
+    
     !print *, ' '
     
-    end if 
+    !end if 
    dC(i) = oneoverrhorbarsqdr*(rhoDdr_p*rsq_p*&
-     !(dchidcomp_p*dComp_p)-&
+     (dchidcomp_p*dComp_p)-&
      !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p))-&
-     (dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p))-&
+     !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p))-&
      rhoDdr_m*rsq_m*&
-     !(dchidcomp_m*dComp_m)&
+     (dchidcomp_m*dComp_m)&
      !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m))&
-     (dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m))&     
+     !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m))&     
      )
 
-    !print *, 'dC', dC(i)
+    !if (mod(it,5147).eq.0) then  
+    !print *, 'i dC',i, dC(i)
+    !end if
     !print *,'oneoverrhorbarsqdr,dComp,rho2overnu12 = ',oneoverrhorbarsqdr(i),dComp(i),rho2overnu12(i)
 
 end do
