@@ -436,7 +436,7 @@ SUBROUTINE solve_eqns
   use data_arrays
 
   !real compute_mass_fraction(nr+1)
-  real (qp) :: dC(nr+1)
+  real (qp) :: dC(nr+1), visc_heat(nr+1)
 
   ! update time
   time = time + dt
@@ -527,16 +527,16 @@ SUBROUTINE solve_eqns
 
     call compute_mass_fraction(dC)
 
-    if (mod(it,9027).eq.0) then  
-      do i=1,nr+1
-        print *,'dC      = ', i, dC(i)
-        print *,'Comp    = ',Comp(i,1)
-        print *,'Nelec   = ',N_elec(i)
-        print *,'NT      = ', N_part(i)
+    !if (mod(it,7612).eq.0) then  
+    !  do i=1,nr+1
+    !    print *,'dC      = ', i, dC(i)
+    !    print *,'Comp    = ',Comp(i,1)
+    !    print *,'Nelec   = ',N_elec(i)
+    !    print *,'NT      = ', N_part(i)
         !print *,'skip'
       !print *,'oC =' , N_av*M(i)*(  Comp(i,2)/ mm_DD* ( 1.+ionized(i)*z1 ) + (1.-Comp(i,2))/ mm_CH* ( 1.+ionized(i)*z2 )  )
-      end do
-    end if 
+    !  end do
+    !end if 
     dC(nr+1) = 0.0
     Comp(:,2) = Comp(:,1) + dt*dC(:)
     Comp((nr+1),2) = 0.0  
@@ -585,10 +585,6 @@ SUBROUTINE solve_eqns
 
   N_elec(1:nr) = (z1*Comp(1:nr,2)/mm_DD + z2*(1-Comp(1:nr,2))/mm_CH)*ionized(1:nr)*M(1:nr)*N_av!+eps_elecs    !  ne - needed in mixing!
   N_part(1:nr) = N_av*M(1:nr)*(Comp(1:nr,2)/mm_DD*(1.+ionized(1:nr)*z1)+(1.-Comp(1:nr,2))/mm_CH*(1.+ionized(1:nr)*z2))    !   z1 = 1 and z2 = z2 hardwired in
-
-
-
-
 
   ! find new pressures
   
@@ -1115,14 +1111,14 @@ subroutine compute_mass_fraction(dC)
   pelecs(:) = P(:,1)*N_elec(:)/N_part(:) !N_elec(:)/Vol(:,1)*Temp(:,1) !
   pions(:) = P(:,1)*(1.0-N_elec(:)/N_part(:))
   Zi(:) = (N_av*M(:)*(Comp(:,1)/mm_DD)*ionized(:)*z1)/(N_elec(:)+eps_elecs)
-
+  Zi(nr+1) = 0.0 
 
   do i = 1,nr
 
     oneoverrhorbarsqdr = 1.0/rho(i,2)/(0.5*(r(i+1,2)+r(i,2)))**2.0/dr(i,2)
     
     if (Zi(i) .gt. 1.0) then
-      Zi(i) = 0.0
+     ! Zi(i) = 0.0
     end if
     !tempr = rho2overnu12_calc(mm_DD/N_av,mm_CH/N_av,z1,z2,Temp(i,1),Temp(i,1),Temp(i,1),logLambda(i))
 
@@ -1261,11 +1257,13 @@ subroutine compute_mass_fraction(dC)
      !(dchidcomp_p*dComp_p)&
      !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p))&
      !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p))&
+     !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p+gTeconst_p*dTe_p+gTiconst_p*dTi_p))&
      (dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p+gTeconst_p*dTe_p+gTiconst_p*dTi_p))&
      -rhoDdr_m*rsq_m*&
      !(dchidcomp_m*dComp_m)&
      !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m))&
      !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m))&
+     !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m+gTeconst_m*dTe_m+gTiconst_m*dTi_m))&     
      (dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m+gTeconst_m*dTe_m+gTiconst_m*dTi_m))&     
      )
 
@@ -1277,3 +1275,37 @@ subroutine compute_mass_fraction(dC)
 end do
     
 end subroutine compute_mass_fraction
+
+subroutine compute_visc_heating(dTv)
+  use prec_param
+  use phys_const
+  use data_arrays
+  use exp_params
+
+  implicit none
+
+  real (qp) ::  dTv(nr+1)
+  real (qp) ::  nu_p, nu_m
+  integer   ::  ii
+
+  do ii = 1:nr+1
+
+    mu_plus  = 1000*(mm_DD*Comp(i+1,1)/(1+ionized(i+1)) + mm_CH*(1-Comp(i+1,1))/(1+ionized(i+1)))
+    eta_plus = (1e-1)*(2.0064e7)*sqrt(mu_plus)*(.2)*kb_ergeV*((Temp(i+1,1)/JeV_conv)**2.5) 
+
+    if (ii .eq. 1) then
+      nu_m = 
+    else 
+      nu_m = 
+    end if 
+
+    dTv(i) = 2.0 * nu * (((u(i+1)-u(i))/dr(i))**2.0 + (0.5*(u(i+1)+u(i))/(0.5*r(i)+dr(i)))**2.0)
+
+  end 
+
+end
+
+
+
+
+
