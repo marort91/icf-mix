@@ -524,17 +524,19 @@ SUBROUTINE solve_eqns
     Comp((nr+1),2) = 0  
   
   else if (diff_sw .eq. 2) then
-    if (mod(it,1473).eq.0) then  
+
+    call compute_mass_fraction(dC)
+
+    if (mod(it,9027).eq.0) then  
       do i=1,nr+1
-        print *,'Comp    = ', i, Comp(i,2)
-        print *,'ionized = ',ionized(i)
+        print *,'dC      = ', i, dC(i)
+        print *,'Comp    = ',Comp(i,1)
         print *,'Nelec   = ',N_elec(i)
         print *,'NT      = ', N_part(i)
-        print *,'skip'
+        !print *,'skip'
       !print *,'oC =' , N_av*M(i)*(  Comp(i,2)/ mm_DD* ( 1.+ionized(i)*z1 ) + (1.-Comp(i,2))/ mm_CH* ( 1.+ionized(i)*z2 )  )
       end do
     end if 
-    call compute_mass_fraction(dC)
     dC(nr+1) = 0.0
     Comp(:,2) = Comp(:,1) + dt*dC(:)
     Comp((nr+1),2) = 0.0  
@@ -581,8 +583,8 @@ SUBROUTINE solve_eqns
    ! end do
   !end if 
 
-  N_elec(:) = (z1*Comp(:,2)/mm_DD + z2*(1-Comp(:,2))/mm_CH)*ionized(:)*M(:)*N_av!+eps_elecs    !  ne - needed in mixing!
-  N_part(:) = N_av*M(:)*(Comp(:,2)/mm_DD*(1.+ionized(:)*z1)+(1.-Comp(:,2))/mm_CH*(1.+ionized(:)*z2))    !   z1 = 1 and z2 = z2 hardwired in
+  N_elec(1:nr) = (z1*Comp(1:nr,2)/mm_DD + z2*(1-Comp(1:nr,2))/mm_CH)*ionized(1:nr)*M(1:nr)*N_av!+eps_elecs    !  ne - needed in mixing!
+  N_part(1:nr) = N_av*M(1:nr)*(Comp(1:nr,2)/mm_DD*(1.+ionized(1:nr)*z1)+(1.-Comp(1:nr,2))/mm_CH*(1.+ionized(1:nr)*z2))    !   z1 = 1 and z2 = z2 hardwired in
 
 
 
@@ -592,6 +594,8 @@ SUBROUTINE solve_eqns
   
   P(:,2) = (N_part(:)/Vol(:,2)) * Temp(:,2) 
   P((nr+1),2) = out_press
+
+  !N_part(nr+1) = out_press*Vol(nr+1,2)/Temp(nr+1,2)
 
   ! find sound speed
   cs(:) = sqrt( gamma * P(:,2) / rho(:,2) )
@@ -1133,7 +1137,7 @@ subroutine compute_mass_fraction(dC)
       rhoDdr_m = rho2overnu12(i)*P(i,1)/rho(i,1)/dr(i,2)
       !rhoDdr_m = rho2overnu12(i)*pions(i)/rho(i,1)/dr(i,2)
 
-      dComp_m = 0.0 !Comp(i,1)-1.0
+      dComp_m = Comp(i,1)-1.0
 
       !rhoDoverP_m = 
       pions_m = 2.0/(1.0/pions(i) + 1.0/pions(i))
@@ -1224,7 +1228,7 @@ subroutine compute_mass_fraction(dC)
       dTi_p = Temp(i+1,2)-Temp(i,2)
     
 
-    !if (mod(it,1472).eq.0) then ! .and. (mod(i,56)) then  
+    if (mod(it,1472).eq.0) then ! .and. (mod(i,56)) then  
     !print *, "Nelec      =", i , N_elec(i)
     !print *, "Nions", N_part(i)-N_elec(i)  
     !print *, "Npart      =", N_part(i)
@@ -1250,19 +1254,19 @@ subroutine compute_mass_fraction(dC)
     
     !print *, ' '
     
-    !end if 
+    end if 
 
 
    dC(i) = oneoverrhorbarsqdr*(rhoDdr_p*rsq_p*&
-     (dchidcomp_p*dComp_p)&
+     !(dchidcomp_p*dComp_p)&
      !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p))&
      !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p))&
-     !(dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p+gTeconst_p*dTe_p+gTiconst_p*dTi_p))&
+     (dchidcomp_p*dComp_p-1.0/pions_p*(XmY_p*dPions_p-ZmY_p*dPelecs_p+gTeconst_p*dTe_p+gTiconst_p*dTi_p))&
      -rhoDdr_m*rsq_m*&
-     (dchidcomp_m*dComp_m)&
+     !(dchidcomp_m*dComp_m)&
      !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m))&
      !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m))&
-     !(dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m+gTeconst_m*dTe_m+gTiconst_m*dTi_m))&     
+     (dchidcomp_m*dComp_m-1.0/pions_m*(XmY_m*dPions_m-ZmY_m*dPelecs_m+gTeconst_m*dTe_m+gTiconst_m*dTi_m))&     
      )
 
     !if (mod(it,8).eq.0) then  

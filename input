@@ -1,13 +1,13 @@
 &input_values
-number_r_cells          = 32
+number_r_cells          = 128
 domain_size             = 450.e-6
-nmax_time_steps         = 2000    !   20000    !   1000   !   120000
+nmax_time_steps         = 200000    !   20000    !   1000   !   120000
 time_max                = 30.e-8
 cfl_factor              = 0.6
-initial_time_step       = 1.e-12
+initial_time_step       = 1.e-14
 adiabatic_index         = 1.66667
 inner_boundary          = 0.9   !   0.7  !  .9    !     change to num zones 
-forced_region_zones     = 4    !   10   !  5     !     or change this to frac of domain
+forced_region_zones     = 6    !   10   !  5     !     or change this to frac of domain
 mass1                   = 4e-3
 charge1                 = 1.0
 mass2                   = 13.03e-3
@@ -22,7 +22,7 @@ outerBC_density         = 1.22
 outerBC_temp            = 300.
 viscosity_sw			= 1
 heatflux_sw				= 1
-diffusion_sw			= 2
+diffusion_sw			= 1
 it_steps_per_print      = 100
 output_file_name        = "DataOUT.dat"
 t_out_special_print     = 1.2e-9
